@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from university_pz_parser.db.session import make_engine, make_sessions
 from university_pz_parser.extractors.registry import ExtractorRegistry
+from university_pz_parser.resolvers.yandex_disk import YandexDiskResolver
 from university_pz_parser.services.feed import FeedService
 from university_pz_parser.services.health import HealthService
 from university_pz_parser.services.ingest import IngestService
@@ -33,7 +34,7 @@ class Container:
         sessions = make_sessions(engine)
         http = httpx.AsyncClient(timeout=60, follow_redirects=True)
         store = FileStore(settings.data_dir / "files")
-        resolvers = []
+        resolvers = [YandexDiskResolver(http)]
         ingest = IngestService(
             sessions, store, ExtractorRegistry(), resolvers, settings.max_file_bytes
         )

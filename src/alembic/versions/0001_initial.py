@@ -8,10 +8,10 @@ Create Date: 2026-10-04 22:22:06.694874
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-import university_pz_parser.db.types
 
+import university_pz_parser.db.types
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
