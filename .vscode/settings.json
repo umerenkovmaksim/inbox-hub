@@ -1,0 +1,27 @@
+{
+    "editor.inlineSuggest.enabled": true,
+    "github.copilot.enable": {
+        "*": false,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false
+    },
+    "mypy-type-checker.ignorePatterns": [
+        "**/*.py"
+    ],
+    "ruff.importStrategy": "fromEnvironment",
+    "ruff.configurationPreference": "filesystemFirst",
+    "ruff.lint.enable": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
+    "editor.quickSuggestions": {
+        "other": "on",
+        "comments": "off",
+        "strings": "off"
+    }
+}

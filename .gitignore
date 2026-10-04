@@ -1,0 +1,7 @@
+*.session
+*.session-journal
+.env
+.venv/
+__pycache__/
+.mypy_cache/
+.superpowers/
