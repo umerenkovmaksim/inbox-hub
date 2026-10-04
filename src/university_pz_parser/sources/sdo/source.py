@@ -26,14 +26,41 @@ class ModuleDetails:
     text: str = ""
     files: tuple[IncomingFile, ...] = ()
     status: dict[str, str] = field(default_factory=dict)
-    feedback: dict[str, str] = field(default_factory=dict)
+    grade: html.GradeInfo | None = None
     available_from: datetime | None = None
     due_at: datetime | None = None
     uploaded: list[datetime] = field(default_factory=list)
 
 
+def _fmt(value: float) -> str:
+    return f"{value:g}".replace(".", ",")
+
+
+def _merged_grade(
+    grade: html.GradeInfo | None, row: html.GradeRow | None
+) -> html.GradeInfo | None:
+    if (
+        row is None
+        or row.value is None
+        or (grade is not None and grade.value is not None)
+    ):
+        return grade
+    base = grade or html.GradeInfo()
+    return html.GradeInfo(
+        value=row.value,
+        max=row.max,
+        graded_at=base.graded_at,
+        grader=base.grader,
+        grading=base.grading,
+        feedback=base.feedback or row.feedback,
+    )
+
+
 def build_items(
-    course: Course, page: html.CoursePage, details: dict[int, ModuleDetails]
+    course: Course,
+    page: html.CoursePage,
+    details: dict[int, ModuleDetails],
+    gradebook: html.Gradebook | None = None,
 ) -> list[IncomingItem]:
     common = dict(
         source=Source.SDO,
@@ -61,13 +88,9 @@ def build_items(
         due_at = d.due_at or m.due_at
         dates = [x for x in [*d.uploaded, available_from] if x is not None]
         text = "\n\n".join(filter(None, [m.description, d.text]))
-        hashed = {}
-        if m.kind == "assign":
-            hashed = {
-                "grading": d.status.get("Состояние оценивания"),
-                "grade": d.feedback.get("Оценка"),
-                "feedback": d.feedback.get("Отзыв в виде комментария"),
-            }
+        row = gradebook.items.get(m.cmid) if gradebook else None
+        grade = _merged_grade(d.grade, row)
+        hashed = {"grade": grade.as_dict()} if grade and not grade.is_empty else {}
         items.append(
             IncomingItem(
                 external_key=f"cm:{m.cmid}",
@@ -85,6 +108,22 @@ def build_items(
                     "cmid": m.cmid,
                     "submission": d.status.get("Состояние ответа на задание"),
                 },
+                **common,
+            )
+        )
+    total = gradebook.course_total if gradebook else None
+    if total is not None and total.value is not None:
+        grade = html.GradeInfo(value=total.value, max=total.max)
+        maximum = f" из {_fmt(total.max)}" if total.max is not None else ""
+        items.append(
+            IncomingItem(
+                external_key=f"course_grade:{course.id}",
+                kind="course_grade",
+                title=f"Итоговая оценка: {course.name}",
+                text=f"Итоговая оценка за курс: {_fmt(total.value)}{maximum}",
+                published_at=None,
+                hashed_extra={"grade": grade.as_dict()},
+                extra={"course_id": course.id},
                 **common,
             )
         )
@@ -131,6 +170,9 @@ class SdoSource:
                 page = html.parse_course(
                     await self.sdo.page(f"/course/view.php?id={course.id}"), self.tz
                 )
+                gradebook = html.parse_gradebook(
+                    await self.sdo.page(f"/grade/report/user/index.php?id={course.id}")
+                )
                 details: dict[int, ModuleDetails] = {}
                 failed: set[int] = set()
                 for m in page.modules:
@@ -146,7 +188,7 @@ class SdoSource:
                     page.sections,
                     [m for m in page.modules if m.cmid not in failed],
                 )
-                for item in build_items(course, page, details):
+                for item in build_items(course, page, details, gradebook):
                     report.count(await self.ingest.ingest(item))
             except Exception as exc:
                 log.exception("sdo course %s failed", course.id)
@@ -172,7 +214,7 @@ class SdoSource:
                 text=page.intro,
                 files=tuple([await self._file(f.url, f.name) for f in page.files]),
                 status=page.status,
-                feedback=page.feedback,
+                grade=page.grade,
                 available_from=page.available_from,
                 due_at=page.due_at,
                 uploaded=[f.uploaded_at for f in page.files if f.uploaded_at],

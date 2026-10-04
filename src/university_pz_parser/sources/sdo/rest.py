@@ -159,6 +159,7 @@ class SdoRest:
                     ),
                     None,
                 )
+                value, maximum = html.parse_grade_text(feedback.get("gradefordisplay"))
                 details[m["id"]] = ModuleDetails(
                     text=html.html_to_text(a.get("intro")),
                     files=tuple(self._file(f) for f in attachments),
@@ -166,20 +167,16 @@ class SdoRest:
                         "Состояние ответа на задание": (
                             (status.get("lastattempt") or {}).get("submission") or {}
                         ).get("status"),
-                        "Состояние оценивания": (status.get("lastattempt") or {}).get(
-                            "gradingstatus"
+                    },
+                    grade=html.GradeInfo(
+                        value=value,
+                        max=maximum,
+                        graded_at=_ts(
+                            (feedback.get("grade") or {}).get("timemodified")
                         ),
-                    },
-                    feedback={
-                        k: v
-                        for k, v in {
-                            "Оценка": feedback.get("gradefordisplay"),
-                            "Отзыв в виде комментария": html.html_to_text(comment)
-                            if comment
-                            else None,
-                        }.items()
-                        if v
-                    },
+                        grading=(status.get("lastattempt") or {}).get("gradingstatus"),
+                        feedback=html.html_to_text(comment) if comment else None,
+                    ),
                     available_from=_ts(a.get("allowsubmissionsfromdate")),
                     due_at=_ts(a.get("duedate")),
                     uploaded=[

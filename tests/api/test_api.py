@@ -122,3 +122,33 @@ async def test_item_exposes_updated_at(container):
             headers=H,
         )
         assert r.json() == {"updated": 0}
+
+
+async def test_grade_is_structured_in_item(container):
+    await container.ingest.ingest(
+        IncomingItem(
+            source=Source.SDO,
+            external_key="cm:2",
+            channel_external_id="1",
+            channel_title="К",
+            kind="assign",
+            text="ДЗ",
+            published_at=datetime(2026, 10, 1, 10, tzinfo=UTC),
+            hashed_extra={
+                "grade": {
+                    "value": 70.0,
+                    "max": 70.0,
+                    "graded_at": "2026-10-02T10:00:00+00:00",
+                    "grader": "Преподаватель",
+                    "grading": "Оценено",
+                    "feedback": "ок",
+                }
+            },
+        )
+    )
+    params = {"from": "2026-10-01T00:00:00+03:00", "to": "2026-10-02T00:00:00+03:00"}
+    async with client_for(container) as client:
+        it = (await client.get("/items", params=params, headers=H)).json()["items"][0]
+    assert it["grade"]["value"] == 70.0 and it["grade"]["grader"] == "Преподаватель"
+    assert it["grade"]["graded_at"].startswith("2026-10-02T10:00:00")
+    assert "grade" not in it["extra"]

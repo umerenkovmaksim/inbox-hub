@@ -45,6 +45,7 @@ Collect every Item from the group's Telegram chats and from the university СД�
 - Module kinds: assign (intro, intro attachments, dates, submission status, grade, teacher feedback), resource (file), folder (all files), url (target URL; Yandex Disk resolved), scorm (metadata only), anything else (name + description).
 - `remote_id` for СДО files = `ETag` from a `HEAD` on the pluginfile URL (it is the file's sha1), fallback `Last-Modified`, fallback URL.
 - `published_at` = earliest of attachment upload times / "Открыто с"; else `first_seen_at`.
+- Grades (СДО only): the assign page `.feedback` block is parsed into `{value, max, graded_at, grader, grading, feedback}`; other modules take value/max/feedback from the course grade report (`/grade/report/user/index.php?id=`). The structure is hashed, so a changed grade makes the Item Edited. The course total is a separate Item `course_grade:{course_id}`. The API exposes it as `grade` on `/items` and `/items/{id}`. If the grade report fails to load, the course is skipped for that run.
 - Schedule: every 3 hours 07:00–22:00 Europe/Moscow.
 
 ## Text extraction

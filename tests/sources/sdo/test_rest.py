@@ -98,5 +98,5 @@ async def test_contents_to_pages():
         and "token=T" not in d.files[0].remote_id
     )
     assert d.status["Состояние ответа на задание"] == "submitted"
-    assert d.feedback["Оценка"] == "5"
+    assert d.grade.value == 5.0
     assert details[92422].files[0].name == "l1.pdf"

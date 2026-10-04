@@ -100,3 +100,35 @@ async def test_module_details_failure_skips_item_instead_of_blanking_it():
     assert "cm:90675" not in ingest.seen
     assert "cm:92447" in ingest.seen
     assert any("90675" in w for w in report.warnings)
+
+
+async def test_gradebook_failure_skips_course_and_ingests_nothing():
+    from pathlib import Path
+
+    fx = Path(__file__).parents[2] / "fixtures" / "sdo"
+
+    class Sdo(FakeSdo):
+        async def ajax(self, *a, **k):
+            return {"courses": [{"id": 3058, "fullname": "К", "summary": ""}]}
+
+        async def page(self, path):
+            if "grade/report" in path:
+                raise RuntimeError("timeout")
+            if "course/view" in path:
+                return (fx / "course_3058.html").read_text()
+            return (fx / "assign_92447.html").read_text()
+
+        async def head_remote_id(self, url):
+            return "etag:x"
+
+        def fetcher(self, url, name):
+            return None
+
+        async def resolve_redirect(self, path):
+            return path
+
+    ingest = FakeIngest()
+    settings = SdoSettings(url="https://x", username="u", password="p")
+    report = await SdoSource(Sdo(), ingest, settings, MSK).sync()
+    assert ingest.seen == []
+    assert any("course 3058" in w for w in report.warnings)

@@ -47,11 +47,50 @@ class CoursePage:
 
 
 @dataclass(frozen=True)
+class GradeInfo:
+    value: float | None = None
+    max: float | None = None
+    graded_at: datetime | None = None
+    grader: str | None = None
+    grading: str | None = None
+    feedback: str | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return all(v is None for v in self.as_dict().values())
+
+    def as_dict(self) -> dict:
+        return {
+            "value": self.value,
+            "max": self.max,
+            "graded_at": self.graded_at.isoformat() if self.graded_at else None,
+            "grader": self.grader,
+            "grading": self.grading,
+            "feedback": self.feedback,
+        }
+
+
+@dataclass(frozen=True)
+class GradeRow:
+    name: str
+    value: float | None
+    max: float | None
+    percent: float | None
+    feedback: str | None
+
+
+@dataclass(frozen=True)
+class Gradebook:
+    items: dict[int, GradeRow]
+    course_total: GradeRow | None
+
+
+@dataclass(frozen=True)
 class AssignPage:
     intro: str
     files: list[RemoteFile]
     status: dict[str, str]
-    feedback: dict[str, str]
+    grade: GradeInfo
     available_from: datetime | None
     due_at: datetime | None
 
@@ -175,6 +214,32 @@ def _table(node: Node | None) -> dict[str, str]:
     return result
 
 
+NUMBER = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*$")
+
+
+def _number(text: str | None) -> float | None:
+    match = NUMBER.match(text or "")
+    return float(match.group(1).replace(",", ".")) if match else None
+
+
+def parse_grade_text(text: str | None) -> tuple[float | None, float | None]:
+    value, _, maximum = (text or "").partition("/")
+    return _number(" ".join(value.split())), _number(" ".join(maximum.split()))
+
+
+def _grade(status: dict[str, str], feedback: dict[str, str], tz: ZoneInfo) -> GradeInfo:
+    value, maximum = parse_grade_text(feedback.get("Оценка"))
+    comment = next((v for k, v in feedback.items() if k.startswith("Отзыв")), None)
+    return GradeInfo(
+        value=value,
+        max=maximum,
+        graded_at=parse_ru_datetime(feedback.get("Оценено в", ""), tz),
+        grader=feedback.get("Оценено") or None,
+        grading=status.get("Состояние оценивания") or None,
+        feedback=comment or None,
+    )
+
+
 def parse_assign(html: str, tz: ZoneInfo) -> AssignPage:
     tree = HTMLParser(html)
     desc = tree.css_first(".activity-description")
@@ -183,11 +248,12 @@ def parse_assign(html: str, tz: ZoneInfo) -> AssignPage:
         for tree_node in desc.css('[id^="assign_files_tree"]'):
             tree_node.decompose()
     start, due = _dates(tree.css_first('[data-region="activity-dates"]'), tz)
+    status = _table(tree.css_first(".submissionstatustable"))
     return AssignPage(
         intro=_text(desc),
         files=files,
-        status=_table(tree.css_first(".submissionstatustable")),
-        feedback=_table(tree.css_first(".feedback")),
+        status=status,
+        grade=_grade(status, _table(tree.css_first(".feedback")), tz),
         available_from=start,
         due_at=due,
     )
@@ -222,3 +288,31 @@ def parse_sesskey(html: str) -> str | None:
 
 def is_login_page(html: str) -> bool:
     return HTMLParser(html).css_first('form input[name="logintoken"]') is not None
+
+
+def _grade_row(tr: Node, name: str) -> GradeRow:
+    value = _number(_text(tr.css_first("td.column-grade")))
+    range_text = _text(tr.css_first("td.column-range"))
+    maximum = _number(re.split(r"[–-]", range_text)[-1]) if range_text else None
+    percent = _number(_text(tr.css_first("td.column-percentage")).removesuffix("%"))
+    feedback = _text(tr.css_first("td.column-feedback")) or None
+    return GradeRow(name, value, maximum, percent, feedback)
+
+
+def parse_gradebook(html: str) -> Gradebook:
+    tree = HTMLParser(html)
+    items: dict[int, GradeRow] = {}
+    total: GradeRow | None = None
+    for tr in tree.css("table.user-grade tr"):
+        head = tr.css_first("th.column-itemname")
+        if head is None or tr.css_first("td.column-grade") is None:
+            continue
+        name = _text(head.css_first(".rowtitle")) or _text(head)
+        link = head.css_first("a.gradeitemheader")
+        if head.css_first(".courseitem") is not None:
+            total = _grade_row(tr, name)
+        elif link is not None:
+            match = re.search(r"[?&]id=(\d+)", link.attributes.get("href") or "")
+            if match:
+                items[int(match.group(1))] = _grade_row(tr, name)
+    return Gradebook(items, total)

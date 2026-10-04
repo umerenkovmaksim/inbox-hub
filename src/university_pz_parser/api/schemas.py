@@ -25,6 +25,15 @@ class SkippedFileOut(BaseModel):
     reason: str
 
 
+class GradeOut(BaseModel):
+    value: float | None = None
+    max: float | None = None
+    graded_at: datetime | None = None
+    grader: str | None = None
+    grading: str | None = None
+    feedback: str | None = None
+
+
 class ItemOut(BaseModel):
     id: int
     source: str
@@ -46,6 +55,7 @@ class ItemOut(BaseModel):
     files: list[FileOut]
     removed_files: list[FileOut]
     skipped_files: list[SkippedFileOut]
+    grade: GradeOut | None
     extra: dict[str, Any]
 
 
@@ -92,6 +102,7 @@ def _file_out(link, item: Item, limit: int | None) -> FileOut:
 def item_out(item: Item, text_limit: int | None) -> ItemOut:
     extra = dict(item.extra or {})
     skipped = extra.pop("skipped_files", [])
+    grade = extra.pop("grade", None)
     return ItemOut(
         id=item.id,
         source=item.source,
@@ -117,6 +128,7 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
             _file_out(k, item, 0) for k in item.links if k.detached_at is not None
         ],
         skipped_files=[SkippedFileOut(**s) for s in skipped],
+        grade=GradeOut(**grade) if grade else None,
         extra=extra,
     )
 

@@ -46,6 +46,8 @@ def get_items(
     date_from/date_to — ISO 8601 с часовым поясом, например 2026-10-01T00:00:00+03:00.
     source — "telegram" или "sdo". По умолчанию возвращаются только ещё не полученные (Received) элементы.
     У изменённых элементов edited=true, есть previous_text, removed_files и files[].added_on_edit.
+    Оценка преподавателя (только СДО) лежит в поле grade: value, max, graded_at, grader, grading, feedback;
+    итог за курс приходит отдельным элементом kind="course_grade". Смена оценки делает элемент изменённым.
     Тексты файлов обрезаны до 4000 символов (text_truncated) — полный текст через get_item.
     После обработки вызови mark_received с id обработанных элементов."""
     params = {
