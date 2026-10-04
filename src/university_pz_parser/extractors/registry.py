@@ -9,7 +9,18 @@ from university_pz_parser.extractors import formats
 
 log = logging.getLogger(__name__)
 
-PLAIN = {".txt", ".md", ".csv", ".py", ".sql", ".json", ".html", ".xml", ".yaml", ".yml"}
+PLAIN = {
+    ".txt",
+    ".md",
+    ".csv",
+    ".py",
+    ".sql",
+    ".json",
+    ".html",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
 HANDLERS: dict[str, Callable[[Path], str]] = {
     ".docx": formats.docx_text,
     ".pptx": formats.pptx_text,

@@ -24,7 +24,9 @@ async def test_roundtrip_keeps_utc(sessions):
             updated_at=now,
             content_hash="h",
         )
-        item.links.append(ItemFile(file_sha256="a" * 64, remote_id="r", attached_at=now))
+        item.links.append(
+            ItemFile(file_sha256="a" * 64, remote_id="r", attached_at=now)
+        )
         s.add(item)
     async with sessions() as s:
         got = (await s.execute(select(Item))).scalar_one()

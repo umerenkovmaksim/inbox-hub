@@ -29,7 +29,10 @@ def _pdf_with_text(path, text):
     out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
     for off in offsets:
         out += b"%010d 00000 n \n" % off
-    out += b"trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % (len(objs) + 1, xref)
+    out += b"trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % (
+        len(objs) + 1,
+        xref,
+    )
     path.write_bytes(bytes(out))
 
 
@@ -54,8 +57,12 @@ def test_pptx_xlsx_ipynb(tmp_path):
     wb = openpyxl.Workbook()
     wb.active.append(["ФИО", "Балл"])
     wb.save(tmp_path / "t.xlsx")
-    nb = {"cells": [{"cell_type": "markdown", "source": ["# Занятие 1"]},
-                    {"cell_type": "code", "source": "print(1)"}]}
+    nb = {
+        "cells": [
+            {"cell_type": "markdown", "source": ["# Занятие 1"]},
+            {"cell_type": "code", "source": "print(1)"},
+        ]
+    }
     (tmp_path / "n.ipynb").write_text(json.dumps(nb))
     reg = ExtractorRegistry()
     assert "Лекция 3" in reg.extract(tmp_path / "l.pptx", "l.pptx", None).text
@@ -82,7 +89,9 @@ def test_zip_recursive_and_unsupported_and_failed(tmp_path):
     (tmp_path / "bad.docx").write_bytes(b"not a zip")
     reg = ExtractorRegistry()
     zr = reg.extract(tmp_path / "a.zip", None, None)
-    assert zr.status == "ok" and "### dir/in.txt" in zr.text and "внутри архива" in zr.text
+    assert (
+        zr.status == "ok" and "### dir/in.txt" in zr.text and "внутри архива" in zr.text
+    )
     assert reg.extract(tmp_path / "x.bin", None, None).status == "unsupported"
     assert reg.extract(tmp_path / "bad.docx", None, None).status == "failed"
 

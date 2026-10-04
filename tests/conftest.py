@@ -1,6 +1,10 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
+from university_pz_parser.services.ingest import IngestService
 
 from university_pz_parser.db.session import create_all, make_engine, make_sessions
+from university_pz_parser.extractors.registry import ExtractorRegistry
 from university_pz_parser.settings import (
     ApiSettings,
     DatabaseSettings,
@@ -8,6 +12,7 @@ from university_pz_parser.settings import (
     Settings,
     TelegramSettings,
 )
+from university_pz_parser.storage.files import FileStore
 
 
 @pytest.fixture
@@ -34,3 +39,36 @@ async def engine(settings):
 @pytest.fixture
 def sessions(engine):
     return make_sessions(engine)
+
+
+class Clock:
+    def __init__(self):
+        self.now = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+
+    def __call__(self):
+        return self.now
+
+    def tick(self, minutes=1):
+        self.now += timedelta(minutes=minutes)
+
+
+@pytest.fixture
+def clock():
+    return Clock()
+
+
+@pytest.fixture
+def store(settings):
+    return FileStore(settings.data_dir / "files")
+
+
+@pytest.fixture
+def ingest(sessions, store, clock, settings):
+    return IngestService(
+        sessions=sessions,
+        store=store,
+        extractors=ExtractorRegistry(),
+        resolvers=[],
+        max_file_bytes=settings.max_file_bytes,
+        clock=clock,
+    )
