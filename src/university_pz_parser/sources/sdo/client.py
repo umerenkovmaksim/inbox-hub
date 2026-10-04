@@ -77,11 +77,8 @@ class SdoHttp:
             return str(resp.url)
 
     async def head_remote_id(self, url: str) -> str:
-        try:
-            resp = await self.http.head(url)
-            resp.raise_for_status()
-        except httpx.HTTPError:
-            return f"url:{url}"
+        resp = await self.http.head(url)
+        resp.raise_for_status()
         etag = resp.headers.get("etag")
         if etag:
             return "etag:" + etag.removeprefix("W/").strip('"')

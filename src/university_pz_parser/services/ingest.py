@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from university_pz_parser.db.models import Channel, File, Item, ItemFile
@@ -65,11 +65,14 @@ class IngestService:
         async with self._lock:
             files = await self._collect_files(item)
             digest = content_hash(item, [f.remote_id for f in files])
+            attached: set[str] = set()
             async with self.sessions.begin() as s:
                 row = await self._find(s, item)
                 if row is not None and row.content_hash == digest:
                     row.extra = {**row.extra, **item.extra, **item.hashed_extra}
                     return IngestStatus.SAME
+                if row is not None:
+                    attached = {k.remote_id for k in row.links if k.detached_at is None}
             result = await self._fetch(files)
             extractions = await self._extract_new(result.fetched)
             final_digest = content_hash(
@@ -78,6 +81,7 @@ class IngestService:
                     f.remote_id
                     for f in files
                     if f.remote_id not in result.failed_remote_ids
+                    or f.remote_id in attached
                 ],
             )
             return await self._write(item, final_digest, result, extractions)
@@ -107,15 +111,7 @@ class IngestService:
         files = list(item.files)
         haystack = "\n".join(filter(None, [item.text, item.url]))
         for resolver in self.resolvers:
-            try:
-                files.extend(await resolver.resolve(haystack))
-            except Exception:
-                log.warning(
-                    "resolver %s failed for %s",
-                    type(resolver).__name__,
-                    item.external_key,
-                    exc_info=True,
-                )
+            files.extend(await resolver.resolve(haystack))
         unique: dict[str, IncomingFile] = {}
         for f in files:
             unique.setdefault(f.remote_id, f)
@@ -183,6 +179,15 @@ class IngestService:
     ) -> IngestStatus:
         now = self.clock()
         async with self.sessions.begin() as s:
+            existing = await self._find(s, item)
+            if existing is not None and existing.content_hash == digest:
+                existing.extra = {
+                    **existing.extra,
+                    **item.extra,
+                    **item.hashed_extra,
+                    "skipped_files": result.skipped,
+                }
+                return IngestStatus.SAME
             channel = await self._channel(s, item)
             for sha, extraction in extractions.items():
                 f = next(x for x in result.fetched if x.stored.sha256 == sha)
@@ -215,7 +220,7 @@ class IngestService:
                 if row.text != item.text:
                     row.previous_text = row.text
                 row.edited = True
-                row.edited_at = item.edited_at or now
+                row.edited_at = now
                 row.received_at = None
                 status = IngestStatus.CHANGED
             row.channel_id = channel.id
@@ -233,6 +238,16 @@ class IngestService:
             self._sync_links(row, result, now)
             await s.flush()
             row.duplicate_of_id = await self._find_duplicate(s, row)
+            if row.duplicate_of_id is None and row.text_norm_hash is not None:
+                await s.execute(
+                    update(Item)
+                    .where(
+                        Item.text_norm_hash == row.text_norm_hash,
+                        Item.id != row.id,
+                        Item.published_at > row.published_at,
+                    )
+                    .values(duplicate_of_id=row.id)
+                )
         return status
 
     def _sync_links(self, row: Item, result: FetchResult, now: datetime) -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from university_pz_parser.logging import configure_logging
-from university_pz_parser.settings import get_settings
+from university_pz_parser.settings import check_api_token, get_settings
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -98,6 +98,7 @@ def serve() -> None:
 
     configure_logging()
     s = get_settings()
+    check_api_token(s.api)
     uvicorn.run(
         create_app(), host=s.api.host, port=s.api.port, workers=1, log_config=None
     )

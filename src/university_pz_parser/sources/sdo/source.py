@@ -131,7 +131,21 @@ class SdoSource:
                 page = html.parse_course(
                     await self.sdo.page(f"/course/view.php?id={course.id}"), self.tz
                 )
-                details = {m.cmid: await self._details(m) for m in page.modules}
+                details: dict[int, ModuleDetails] = {}
+                failed: set[int] = set()
+                for m in page.modules:
+                    try:
+                        details[m.cmid] = await self._details(m)
+                    except Exception as exc:
+                        log.warning(
+                            "sdo module %s details failed", m.cmid, exc_info=True
+                        )
+                        failed.add(m.cmid)
+                        report.warnings.append(f"module {m.cmid}: {exc!r}")
+                page = html.CoursePage(
+                    page.sections,
+                    [m for m in page.modules if m.cmid not in failed],
+                )
                 for item in build_items(course, page, details):
                     report.count(await self.ingest.ingest(item))
             except Exception as exc:
@@ -152,42 +166,39 @@ class SdoSource:
         ]
 
     async def _details(self, m: html.ModuleRef) -> ModuleDetails:
-        try:
-            if m.kind == "assign" and m.url:
-                page = html.parse_assign(await self.sdo.page(m.url), self.tz)
+        if m.kind == "assign" and m.url:
+            page = html.parse_assign(await self.sdo.page(m.url), self.tz)
+            return ModuleDetails(
+                text=page.intro,
+                files=tuple([await self._file(f.url, f.name) for f in page.files]),
+                status=page.status,
+                feedback=page.feedback,
+                available_from=page.available_from,
+                due_at=page.due_at,
+                uploaded=[f.uploaded_at for f in page.files if f.uploaded_at],
+            )
+        if m.kind == "resource" and m.url:
+            final = await self.sdo.resolve_redirect(m.url)
+            if "pluginfile.php" in final:
                 return ModuleDetails(
-                    text=page.intro,
-                    files=tuple([await self._file(f.url, f.name) for f in page.files]),
-                    status=page.status,
-                    feedback=page.feedback,
-                    available_from=page.available_from,
-                    due_at=page.due_at,
-                    uploaded=[f.uploaded_at for f in page.files if f.uploaded_at],
+                    files=(await self._file(final, html.file_name_from_url(final)),)
                 )
-            if m.kind == "resource" and m.url:
-                final = await self.sdo.resolve_redirect(m.url)
-                if "pluginfile.php" in final:
-                    return ModuleDetails(
-                        files=(await self._file(final, html.file_name_from_url(final)),)
-                    )
-                return ModuleDetails(
-                    files=tuple(
-                        [
-                            await self._file(f.url, f.name)
-                            for f in html.parse_folder(await self.sdo.page(m.url))
-                        ]
-                    )
+            return ModuleDetails(
+                files=tuple(
+                    [
+                        await self._file(f.url, f.name)
+                        for f in html.parse_folder(await self.sdo.page(m.url))
+                    ]
                 )
-            if m.kind == "folder" and m.url:
-                found = html.parse_folder(await self.sdo.page(m.url))
-                return ModuleDetails(
-                    files=tuple([await self._file(f.url, f.name) for f in found])
-                )
-            if m.kind == "url" and m.url:
-                target = html.parse_url_module(await self.sdo.page(m.url))
-                return ModuleDetails(text=target or "")
-        except Exception:
-            log.warning("sdo module %s details failed", m.cmid, exc_info=True)
+            )
+        if m.kind == "folder" and m.url:
+            found = html.parse_folder(await self.sdo.page(m.url))
+            return ModuleDetails(
+                files=tuple([await self._file(f.url, f.name) for f in found])
+            )
+        if m.kind == "url" and m.url:
+            target = html.parse_url_module(await self.sdo.page(m.url))
+            return ModuleDetails(text=target or "")
         return ModuleDetails()
 
     async def _file(self, url: str, name: str) -> IncomingFile:

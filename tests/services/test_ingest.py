@@ -114,7 +114,7 @@ async def test_failed_fetch_is_retried_and_keeps_old_link(ingest, sessions):
     await ingest.ingest(tg(files=[ok]))
     broken = IncomingFile("etag:1", "pz.txt", fetch=failing_fetch())
     extra = IncomingFile("etag:9", "new.txt", fetch=failing_fetch())
-    assert await ingest.ingest(tg(files=[broken, extra])) is IngestStatus.CHANGED
+    assert await ingest.ingest(tg(files=[broken, extra])) is IngestStatus.SAME
     item = await one(sessions, "-1001:1")
     assert [k.detached_at for k in item.links] == [None]
     assert item.extra["skipped_files"][0]["reason"] == "fetch_failed"
@@ -185,3 +185,64 @@ async def test_resolver_files_are_attached(sessions, store, clock, settings):
     )
     await svc.ingest(tg(text="Методичка https://disk.yandex.ru/d/abc"))
     assert (await one(sessions, "-1001:1")).links[0].file.text == "disk"
+
+
+async def test_permanently_failing_file_does_not_edit_every_sync(ingest, sessions):
+    broken = IncomingFile("etag:9", "x.txt", fetch=failing_fetch())
+    first = await ingest.ingest(tg(files=[broken]))
+    second = await ingest.ingest(tg(files=[broken]))
+    third = await ingest.ingest(tg(files=[broken]))
+    assert [first, second, third] == [
+        IngestStatus.NEW,
+        IngestStatus.SAME,
+        IngestStatus.SAME,
+    ]
+    assert not (await one(sessions, "-1001:1")).edited
+
+
+async def test_late_detected_edit_is_dated_by_detection(ingest, sessions, clock):
+    await ingest.ingest(tg(text="Пара в 311 аудитории"))
+    clock.tick(60 * 48)
+    stale_edit = datetime(2026, 10, 1, 9, 5, tzinfo=UTC)
+    await ingest.ingest(tg(text="Пара в 317 аудитории", edited_at=stale_edit))
+    assert (await one(sessions, "-1001:1")).edited_at == clock()
+
+
+async def test_duplicate_repoints_when_earlier_item_arrives_second(ingest, sessions):
+    text = "Внимание! Завтра пары по моделированию не будет, переносим на четверг"
+    await ingest.ingest(tg(msg_id=5, text=text, chat="-1002"))
+    await ingest.ingest(tg(msg_id=2, text=text, chat="-1001"))
+    earlier = await one(sessions, "-1001:2")
+    later = await one(sessions, "-1002:5")
+    assert earlier.duplicate_of_id is None
+    assert later.duplicate_of_id == earlier.id
+
+
+async def test_resolver_outage_aborts_instead_of_detaching(
+    sessions, store, clock, settings
+):
+    class Flaky:
+        up = True
+
+        async def resolve(self, text):
+            if not self.up:
+                raise ConnectionError("down")
+            return [
+                IncomingFile("yadisk:abc", "r.txt", fetch=fetcher(b"disk", "r.txt"))
+            ]
+
+    flaky = Flaky()
+    svc = IngestService(
+        sessions, store, ExtractorRegistry(), [flaky], settings.max_file_bytes, clock
+    )
+    await svc.ingest(tg(text="Методичка https://disk.yandex.ru/d/abc"))
+    flaky.up = False
+    try:
+        await svc.ingest(tg(text="Методичка https://disk.yandex.ru/d/abc"))
+    except ConnectionError:
+        pass
+    else:
+        raise AssertionError("resolver outage must abort ingest")
+    item = await one(sessions, "-1001:1")
+    assert not item.edited
+    assert [k.detached_at for k in item.links] == [None]

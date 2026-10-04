@@ -11,6 +11,7 @@ Restart=always
 RestartSec=10
 NoNewPrivileges=true
 ProtectSystem=strict
+PrivateTmp=true
 ReadWritePaths=/opt/study-inbox/data
 
 [Install]

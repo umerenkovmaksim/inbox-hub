@@ -20,14 +20,11 @@ class YandexDiskResolver:
     async def resolve(self, text: str) -> list[IncomingFile]:
         files: list[IncomingFile] = []
         for link in dict.fromkeys(LINK.findall(text or "")):
-            try:
-                resp = await self.http.get(
-                    API, params={"public_key": link, "limit": 200}
-                )
-                resp.raise_for_status()
-            except httpx.HTTPError:
-                log.warning("yandex disk lookup failed for %s", link, exc_info=True)
+            resp = await self.http.get(API, params={"public_key": link, "limit": 200})
+            if resp.status_code in (403, 404):
+                log.warning("yandex disk link unavailable: %s", link)
                 continue
+            resp.raise_for_status()
             meta = resp.json()
             entries = (
                 [meta]

@@ -7,6 +7,7 @@ from mcp.server import MCPServer
 
 mcp = MCPServer("study-inbox")
 _http: httpx.Client | None = None
+_seen: dict[int, str] = {}
 
 
 def configure(base_url: str, token: str) -> None:
@@ -20,6 +21,11 @@ def _client() -> httpx.Client:
     if _http is None:
         configure(os.environ["INBOX_URL"], os.environ["INBOX_TOKEN"])
     return _http
+
+
+def _remember(item: dict) -> None:
+    if "id" in item and "updated_at" in item:
+        _seen[item["id"]] = item["updated_at"]
 
 
 def _json(resp: httpx.Response):
@@ -50,19 +56,28 @@ def get_items(
     }
     if source:
         params["source"] = source
-    return _json(_client().get("/items", params=params))
+    data = _json(_client().get("/items", params=params))
+    for item in data.get("items", []):
+        _remember(item)
+    return data
 
 
 @mcp.tool()
 def mark_received(ids: list[int]) -> dict:
     """Пометить элементы как полученные, чтобы get_items их больше не возвращал (пока они снова не изменятся)."""
-    return _json(_client().post("/items/receive", json={"ids": ids}))
+    body: dict = {"ids": ids}
+    versions = {str(i): _seen[i] for i in ids if i in _seen}
+    if versions:
+        body["versions"] = versions
+    return _json(_client().post("/items/receive", json=body))
 
 
 @mcp.tool()
 def get_item(item_id: int) -> dict:
     """Полный элемент с полными текстами всех файлов."""
-    return _json(_client().get(f"/items/{item_id}"))
+    item = _json(_client().get(f"/items/{item_id}"))
+    _remember(item)
+    return item
 
 
 @mcp.tool()

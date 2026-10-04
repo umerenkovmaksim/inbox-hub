@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -10,7 +11,7 @@ from university_pz_parser.resolvers.yandex_disk import YandexDiskResolver
 from university_pz_parser.services.feed import FeedService
 from university_pz_parser.services.health import HealthService
 from university_pz_parser.services.ingest import IngestService
-from university_pz_parser.services.jobs import Job, JobRunner
+from university_pz_parser.services.jobs import Job, JobRunner, SyncReport
 from university_pz_parser.settings import Settings
 from university_pz_parser.sources.sdo.client import SdoHttp
 from university_pz_parser.sources.sdo.rest import SdoRest
@@ -18,6 +19,8 @@ from university_pz_parser.sources.sdo.source import SdoSource
 from university_pz_parser.sources.telegram.client import TelegramClientManager
 from university_pz_parser.sources.telegram.source import TelegramSource
 from university_pz_parser.storage.files import FileStore
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,8 +77,13 @@ class Container:
 
     async def start(self) -> None:
         if self.tg is not None:
-            await self.tg.start()
-            self.jobs["telegram"].register_handlers()
+            try:
+                await self.tg.start()
+                self.jobs["telegram"].register_handlers()
+            except Exception as exc:
+                log.exception("telegram unavailable, running without it")
+                self.jobs.pop("telegram", None)
+                await self.health.record(SyncReport("telegram", error=repr(exc)))
 
     async def stop(self) -> None:
         if self.tg is not None:

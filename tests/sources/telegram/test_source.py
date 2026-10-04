@@ -56,3 +56,35 @@ async def test_recheck_picks_up_edits(ingest, settings, clock):
     client.messages[0] = msg(1, "пара в 317", edit=DT + timedelta(hours=2))
     report = await src.sync()
     assert report.changed == 1
+
+
+class Event:
+    def __init__(self, message, chat_id=-1001):
+        self.message = message
+        self.chat_id = chat_id
+
+    async def get_chat(self):
+        return type("Chat", (), {"title": "ИСиТ", "id": self.chat_id})()
+
+
+async def test_live_event_does_not_move_cursor(ingest, settings, clock):
+    src = TelegramSource(FakeClient([]), ingest, settings.telegram, clock=clock)
+    await src.handle_event(Event(msg(600, "новое сообщение")))
+    assert await ingest.channel_cursor(Source.TELEGRAM, "-1001") == 0
+
+
+async def test_one_broken_chat_does_not_stop_the_others(ingest, settings, clock):
+    from university_pz_parser.settings import TelegramSettings
+
+    class Picky(FakeClient):
+        async def get_entity(self, chat_id):
+            if chat_id == -1001:
+                raise ValueError("left the group")
+            return await super().get_entity(chat_id)
+
+    clock.now = DT + timedelta(days=1)
+    tg_settings = TelegramSettings(api_id=1, api_hash="h", source_ids=[-1001, -1002])
+    client = Picky([msg(1, "привет")])
+    report = await TelegramSource(client, ingest, tg_settings, clock=clock).sync()
+    assert report.new == 1
+    assert any("-1001" in w for w in report.warnings)

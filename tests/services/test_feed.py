@@ -58,3 +58,14 @@ async def test_source_filter_and_limit(ingest, sessions, clock):
         == 1
     )
     assert len(await feed.list_items(FeedQuery(D, D + timedelta(days=1), limit=2))) == 2
+
+
+async def test_mark_received_skips_item_edited_after_fetch(ingest, sessions, clock):
+    feed = FeedService(sessions, clock=clock)
+    await ingest.ingest(item("c:1", D, text="v1"))
+    fetched = (await feed.list_items(FeedQuery(D, D + timedelta(days=1))))[0]
+    clock.tick(10)
+    await ingest.ingest(item("c:1", D, text="v2"))
+    assert await feed.mark_received([fetched.id], {fetched.id: fetched.updated_at}) == 0
+    again = await feed.list_items(FeedQuery(D, D + timedelta(days=1)))
+    assert [i.text for i in again] == ["v2"]

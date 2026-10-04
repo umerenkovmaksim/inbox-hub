@@ -91,3 +91,34 @@ async def test_items_flow(container):
 async def test_admin_unknown_source(container):
     async with client_for(container) as client:
         assert (await client.post("/admin/sync/nope", headers=H)).status_code == 404
+
+
+async def test_empty_token_is_never_accepted(settings, engine):
+    from university_pz_parser.settings import ApiSettings
+
+    settings.api = ApiSettings(token="")
+    c = await Container.build(settings, with_sources=False)
+    try:
+        async with client_for(c) as client:
+            for header in ("Bearer ", "Bearer"):
+                r = await client.get("/health", headers={"Authorization": header})
+                assert r.status_code == 401
+    finally:
+        await c.stop()
+
+
+async def test_item_exposes_updated_at(container):
+    await seed(container)
+    params = {"from": "2026-10-01T00:00:00+03:00", "to": "2026-10-02T00:00:00+03:00"}
+    async with client_for(container) as client:
+        it = (await client.get("/items", params=params, headers=H)).json()["items"][0]
+        assert it["updated_at"]
+        r = await client.post(
+            "/items/receive",
+            json={
+                "ids": [it["id"]],
+                "versions": {str(it["id"]): "2000-01-01T00:00:00Z"},
+            },
+            headers=H,
+        )
+        assert r.json() == {"updated": 0}

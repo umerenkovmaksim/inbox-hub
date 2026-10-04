@@ -35,6 +35,7 @@ class ItemOut(BaseModel):
     author: str | None
     url: str | None
     published_at: datetime
+    updated_at: datetime
     edited: bool
     edited_at: datetime | None
     previous_text: str | None
@@ -55,6 +56,7 @@ class ItemsOut(BaseModel):
 
 class ReceiveIn(BaseModel):
     ids: list[int]
+    versions: dict[int, datetime] | None = None
 
 
 class ReceiveOut(BaseModel):
@@ -100,6 +102,7 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         author=item.author,
         url=item.url,
         published_at=item.published_at,
+        updated_at=item.updated_at,
         edited=item.edited,
         edited_at=item.edited_at,
         previous_text=item.previous_text,

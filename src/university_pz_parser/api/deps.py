@@ -15,7 +15,9 @@ async def require_token(
 ) -> None:
     scheme, _, token = (authorization or "").partition(" ")
     expected = c.settings.api.token.get_secret_value()
-    if scheme.lower() != "bearer" or not hmac.compare_digest(
-        token.encode(), expected.encode()
+    if (
+        not expected
+        or scheme.lower() != "bearer"
+        or not hmac.compare_digest(token.encode(), expected.encode())
     ):
         raise HTTPException(status_code=401)

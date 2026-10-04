@@ -94,3 +94,33 @@ def test_noise_is_skipped():
 
 def test_link_for_basic_group_is_none():
     assert message_link(-4000123, 1) is None
+
+
+def test_link_preview_photo_is_not_a_photo_message():
+    from telethon.tl.types import (
+        MessageMediaWebPage,
+        Photo,
+        PhotoSize,
+        WebPage,
+    )
+
+    photo = Photo(
+        id=5,
+        access_hash=1,
+        file_reference=b"",
+        date=DT,
+        sizes=[PhotoSize(type="x", w=1, h=1, size=1)],
+        dc_id=2,
+    )
+    page = WebPage(
+        id=1, url="https://e.test", display_url="e.test", hash=0, photo=photo
+    )
+    m = Message(
+        id=12,
+        peer_id=PeerChannel(1),
+        date=DT,
+        message="смотри https://e.test",
+        media=MessageMediaWebPage(webpage=page),
+    )
+    item = to_incoming(CHAT, "x", m)
+    assert item.kind == "text" and item.files == ()

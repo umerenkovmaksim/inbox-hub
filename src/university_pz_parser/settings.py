@@ -59,3 +59,14 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
+
+
+MIN_TOKEN_LENGTH = 24
+
+
+def check_api_token(api: ApiSettings) -> None:
+    token = api.token.get_secret_value()
+    if len(token) < MIN_TOKEN_LENGTH or token == "change-me":
+        raise ValueError(
+            f"API__TOKEN must be a random string of at least {MIN_TOKEN_LENGTH} chars"
+        )

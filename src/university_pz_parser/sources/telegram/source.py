@@ -43,6 +43,9 @@ class TelegramSource:
             except FloodWaitError as exc:
                 report.warnings.append(f"FloodWait {exc.seconds}s on {chat_id}")
                 break
+            except Exception as exc:
+                log.exception("telegram chat %s failed", chat_id)
+                report.warnings.append(f"chat {chat_id}: {exc!r}")
         return report
 
     async def _catch_up(
@@ -86,9 +89,5 @@ class TelegramSource:
             item = to_incoming(event.chat_id, title, event.message)
             if item is not None:
                 await self.ingest.ingest(item)
-                if not event.message.edit_date:
-                    await self.ingest.advance_cursor(
-                        Source.TELEGRAM, str(event.chat_id), event.message.id
-                    )
         except Exception:
             log.exception("live telegram event failed")

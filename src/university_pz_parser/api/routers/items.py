@@ -45,4 +45,4 @@ async def get_item(item_id: int, c: Container = Depends(get_container)):
 
 @router.post("/items/receive", response_model=ReceiveOut)
 async def receive(body: ReceiveIn, c: Container = Depends(get_container)):
-    return ReceiveOut(updated=await c.feed.mark_received(body.ids))
+    return ReceiveOut(updated=await c.feed.mark_received(body.ids, body.versions))

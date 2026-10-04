@@ -52,14 +52,21 @@ class FeedService:
         async with self.sessions() as s:
             return await s.get(Item, item_id)
 
-    async def mark_received(self, ids: list[int]) -> int:
+    async def mark_received(
+        self, ids: list[int], versions: dict[int, datetime] | None = None
+    ) -> int:
         if not ids:
             return 0
+        versions = versions or {}
+        now = self.clock()
+        updated = 0
         async with self.sessions.begin() as s:
-            result = await s.execute(
-                update(Item).where(Item.id.in_(ids)).values(received_at=self.clock())
-            )
-            return result.rowcount
+            for item_id in dict.fromkeys(ids):
+                stmt = update(Item).where(Item.id == item_id)
+                if item_id in versions:
+                    stmt = stmt.where(Item.updated_at <= versions[item_id])
+                updated += (await s.execute(stmt.values(received_at=now))).rowcount
+        return updated
 
     async def get_file(self, sha256: str) -> File | None:
         async with self.sessions() as s:

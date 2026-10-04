@@ -24,3 +24,19 @@ def test_tools_call_api(tmp_path, monkeypatch):
     assert server.mark_received([1, 2]) == {"updated": 2}
     path = server.get_file("abc")
     assert path.endswith("abc_l1.pdf") and open(path, "rb").read() == b"pdf"
+
+
+@respx.mock
+def test_mark_received_sends_seen_versions():
+    server.configure("https://inbox.test", "tok")
+    server._seen.clear()
+    respx.get("https://inbox.test/items").respond(
+        json={"items": [{"id": 4, "updated_at": "2026-10-01T10:00:00Z"}], "count": 1}
+    )
+    route = respx.post("https://inbox.test/items/receive").respond(json={"updated": 1})
+    server.get_items("2026-10-01T00:00:00+03:00", "2026-10-02T00:00:00+03:00")
+    server.mark_received([4, 9])
+    import json
+
+    body = json.loads(route.calls[0].request.content)
+    assert body == {"ids": [4, 9], "versions": {"4": "2026-10-01T10:00:00Z"}}

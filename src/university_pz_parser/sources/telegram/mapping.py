@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from telethon.tl.custom import Message
-from telethon.tl.types import MessageService
+from telethon.tl.types import (
+    MessageMediaDocument,
+    MessageMediaPhoto,
+    MessageService,
+)
 from telethon.utils import get_display_name
 
 from university_pz_parser.domain.dto import IncomingFile, IncomingItem
@@ -22,15 +26,15 @@ def message_kind(m) -> str | None:
         return None
     if m.sticker or m.dice or m.game:
         return None
-    if m.photo:
+    if isinstance(m.media, MessageMediaPhoto) and m.photo:
         return "photo"
-    if m.voice:
-        return "voice"
-    if m.video_note:
-        return "round"
-    if m.video or m.gif:
-        return "video"
-    if m.document:
+    if isinstance(m.media, MessageMediaDocument) and m.document:
+        if m.voice:
+            return "voice"
+        if m.video_note:
+            return "round"
+        if m.video or m.gif:
+            return "video"
         return "document"
     if m.message:
         return "text"

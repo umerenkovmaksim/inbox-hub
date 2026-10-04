@@ -54,3 +54,22 @@ async def test_api_error_returns_empty():
         assert (
             await YandexDiskResolver(http).resolve("https://disk.yandex.ru/d/X") == []
         )
+
+
+@respx.mock
+async def test_server_error_raises_but_missing_link_is_empty():
+    respx.get(API, params={"public_key": "https://disk.yandex.ru/d/GONE"}).respond(
+        status_code=404
+    )
+    respx.get(API, params={"public_key": "https://disk.yandex.ru/d/DOWN"}).respond(
+        status_code=503
+    )
+    async with httpx.AsyncClient() as http:
+        resolver = YandexDiskResolver(http)
+        assert await resolver.resolve("https://disk.yandex.ru/d/GONE") == []
+        try:
+            await resolver.resolve("https://disk.yandex.ru/d/DOWN")
+        except httpx.HTTPStatusError:
+            pass
+        else:
+            raise AssertionError("503 must raise")
