@@ -108,10 +108,10 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         duplicate_of_id=item.duplicate_of_id,
         received_at=item.received_at,
         files=[
-            _file_out(l, item, text_limit) for l in item.links if l.detached_at is None
+            _file_out(k, item, text_limit) for k in item.links if k.detached_at is None
         ],
         removed_files=[
-            _file_out(l, item, 0) for l in item.links if l.detached_at is not None
+            _file_out(k, item, 0) for k in item.links if k.detached_at is not None
         ],
         skipped_files=[SkippedFileOut(**s) for s in skipped],
         extra=extra,

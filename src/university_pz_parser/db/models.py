@@ -46,7 +46,7 @@ class ItemFile(Base):
     attached_at: Mapped[datetime] = mapped_column(UTCDateTime)
     detached_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
-    item: Mapped["Item"] = relationship(back_populates="links")
+    item: Mapped[Item] = relationship(back_populates="links")
     file: Mapped[File] = relationship(lazy="joined")
 
 

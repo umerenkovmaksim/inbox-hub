@@ -36,7 +36,7 @@ class Container:
     extra_clients: list[httpx.AsyncClient] = field(default_factory=list)
 
     @classmethod
-    async def build(cls, settings: Settings, with_sources: bool = True) -> "Container":
+    async def build(cls, settings: Settings, with_sources: bool = True) -> Container:
         engine = make_engine(settings.database.url)
         sessions = make_sessions(engine)
         http = httpx.AsyncClient(timeout=60, follow_redirects=True)

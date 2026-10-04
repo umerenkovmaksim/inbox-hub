@@ -1,10 +1,8 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from university_pz_parser.domain.dto import IncomingFile
 from university_pz_parser.domain.hashing import content_hash
 from university_pz_parser.sources.sdo.html import (
-    AssignPage,
     CoursePage,
     ModuleRef,
     SectionRef,

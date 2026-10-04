@@ -103,7 +103,7 @@ async def test_replaced_file_detaches_old(ingest, sessions):
     v2 = IncomingFile("etag:2", "pz.txt", fetch=fetcher(b"v2", "pz.txt"))
     await ingest.ingest(tg(files=[v1]))
     assert await ingest.ingest(tg(files=[v2])) is IngestStatus.CHANGED
-    links = {l.file.text: l for l in (await one(sessions, "-1001:1")).links}
+    links = {k.file.text: k for k in (await one(sessions, "-1001:1")).links}
     assert links["v1"].detached_at is not None
     assert links["v2"].detached_at is None
     assert await count(sessions, File) == 2
@@ -116,7 +116,7 @@ async def test_failed_fetch_is_retried_and_keeps_old_link(ingest, sessions):
     extra = IncomingFile("etag:9", "new.txt", fetch=failing_fetch())
     assert await ingest.ingest(tg(files=[broken, extra])) is IngestStatus.CHANGED
     item = await one(sessions, "-1001:1")
-    assert [l.detached_at for l in item.links] == [None]
+    assert [k.detached_at for k in item.links] == [None]
     assert item.extra["skipped_files"][0]["reason"] == "fetch_failed"
     fixed = IncomingFile("etag:9", "new.txt", fetch=fetcher(b"n", "new.txt"))
     assert await ingest.ingest(tg(files=[ok, fixed])) is IngestStatus.CHANGED

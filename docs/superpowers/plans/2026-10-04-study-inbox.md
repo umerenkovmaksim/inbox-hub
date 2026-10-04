@@ -316,7 +316,9 @@ async def test_roundtrip_keeps_utc(sessions):
             updated_at=now,
             content_hash="h",
         )
-        item.links.append(ItemFile(file_sha256="a" * 64, remote_id="r", attached_at=now))
+        item.links.append(
+            ItemFile(file_sha256="a" * 64, remote_id="r", attached_at=now)
+        )
         s.add(item)
     async with sessions() as s:
         got = (await s.execute(select(Item))).scalar_one()
@@ -467,7 +469,12 @@ from pathlib import Path
 
 from sqlalchemy import event
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from university_pz_parser.db.base import Base
 
@@ -833,7 +840,10 @@ def _pdf_with_text(path, text):
     out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
     for off in offsets:
         out += b"%010d 00000 n \n" % off
-    out += b"trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % (len(objs) + 1, xref)
+    out += b"trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % (
+        len(objs) + 1,
+        xref,
+    )
     path.write_bytes(bytes(out))
 
 
@@ -858,8 +868,12 @@ def test_pptx_xlsx_ipynb(tmp_path):
     wb = openpyxl.Workbook()
     wb.active.append(["ФИО", "Балл"])
     wb.save(tmp_path / "t.xlsx")
-    nb = {"cells": [{"cell_type": "markdown", "source": ["# Занятие 1"]},
-                    {"cell_type": "code", "source": "print(1)"}]}
+    nb = {
+        "cells": [
+            {"cell_type": "markdown", "source": ["# Занятие 1"]},
+            {"cell_type": "code", "source": "print(1)"},
+        ]
+    }
     (tmp_path / "n.ipynb").write_text(json.dumps(nb))
     reg = ExtractorRegistry()
     assert "Лекция 3" in reg.extract(tmp_path / "l.pptx", "l.pptx", None).text
@@ -886,7 +900,9 @@ def test_zip_recursive_and_unsupported_and_failed(tmp_path):
     (tmp_path / "bad.docx").write_bytes(b"not a zip")
     reg = ExtractorRegistry()
     zr = reg.extract(tmp_path / "a.zip", None, None)
-    assert zr.status == "ok" and "### dir/in.txt" in zr.text and "внутри архива" in zr.text
+    assert (
+        zr.status == "ok" and "### dir/in.txt" in zr.text and "внутри архива" in zr.text
+    )
     assert reg.extract(tmp_path / "x.bin", None, None).status == "unsupported"
     assert reg.extract(tmp_path / "bad.docx", None, None).status == "failed"
 
@@ -978,7 +994,18 @@ from university_pz_parser.extractors import formats
 
 log = logging.getLogger(__name__)
 
-PLAIN = {".txt", ".md", ".csv", ".py", ".sql", ".json", ".html", ".xml", ".yaml", ".yml"}
+PLAIN = {
+    ".txt",
+    ".md",
+    ".csv",
+    ".py",
+    ".sql",
+    ".json",
+    ".html",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
 HANDLERS: dict[str, Callable[[Path], str]] = {
     ".docx": formats.docx_text,
     ".pptx": formats.pptx_text,
@@ -1129,12 +1156,14 @@ def fetcher(content: bytes, name: str, calls: list | None = None):
         p = tmp / name
         p.write_bytes(content)
         return p
+
     return fetch
 
 
 def failing_fetch():
     async def fetch(tmp):
         raise ConnectionError("boom")
+
     return fetch
 
 
@@ -1154,7 +1183,9 @@ def tg(msg_id=1, text="Сдать ПЗ1 до пятницы", files=(), chat="-1
 
 async def one(sessions, key):
     async with sessions() as s:
-        return (await s.execute(select(Item).where(Item.external_key == key))).scalar_one()
+        return (
+            await s.execute(select(Item).where(Item.external_key == key))
+        ).scalar_one()
 
 
 async def count(sessions, model):
@@ -1178,12 +1209,20 @@ async def test_same_file_in_two_sources_is_one_file(ingest, sessions):
     b = IncomingFile("etag:x", "b.txt", fetch=fetcher(b"same", "b.txt"))
     await ingest.ingest(tg(files=[a]))
     sdo = IncomingItem(
-        source=Source.SDO, external_key="cm:5", channel_external_id="3430",
-        channel_title="МИС", kind="assign", text="ПЗ1", published_at=None, files=(b,),
+        source=Source.SDO,
+        external_key="cm:5",
+        channel_external_id="3430",
+        channel_title="МИС",
+        kind="assign",
+        text="ПЗ1",
+        published_at=None,
+        files=(b,),
     )
     await ingest.ingest(sdo)
     assert await count(sessions, File) == 1
-    assert (await one(sessions, "cm:5")).links[0].file_sha256 == (await one(sessions, "-1001:1")).links[0].file_sha256
+    assert (await one(sessions, "cm:5")).links[0].file_sha256 == (
+        await one(sessions, "-1001:1")
+    ).links[0].file_sha256
 
 
 async def test_edit_after_receive_resets_received(ingest, sessions, clock):
@@ -1225,12 +1264,22 @@ async def test_failed_fetch_is_retried_and_keeps_old_link(ingest, sessions):
 
 
 async def test_oversized_file_is_metadata_only(ingest, sessions, settings):
-    big = IncomingFile("tg:doc:2", "video.mp4", size=settings.max_file_bytes + 1, fetch=fetcher(b"x", "v"))
+    big = IncomingFile(
+        "tg:doc:2",
+        "video.mp4",
+        size=settings.max_file_bytes + 1,
+        fetch=fetcher(b"x", "v"),
+    )
     await ingest.ingest(tg(files=[big]))
     item = await one(sessions, "-1001:1")
     assert item.links == []
     assert item.extra["skipped_files"] == [
-        {"name": "video.mp4", "size": settings.max_file_bytes + 1, "url": None, "reason": "too_large"}
+        {
+            "name": "video.mp4",
+            "size": settings.max_file_bytes + 1,
+            "url": None,
+            "reason": "too_large",
+        }
     ]
     assert await ingest.ingest(tg(files=[big])) is IngestStatus.SAME
 
@@ -1247,7 +1296,9 @@ async def test_text_duplicate_points_to_earliest(ingest, sessions):
 
 async def test_unhashed_extra_updates_silently(ingest, sessions):
     await ingest.ingest(tg(extra={"submission": "нет ответа"}))
-    assert await ingest.ingest(tg(extra={"submission": "отправлено"})) is IngestStatus.SAME
+    assert (
+        await ingest.ingest(tg(extra={"submission": "отправлено"})) is IngestStatus.SAME
+    )
     item = await one(sessions, "-1001:1")
     assert item.extra["submission"] == "отправлено" and not item.edited
 
@@ -1263,8 +1314,15 @@ async def test_cursor_only_moves_forward(ingest):
 async def test_resolver_files_are_attached(sessions, store, clock, settings):
     class Fake:
         async def resolve(self, text):
-            return [IncomingFile("yadisk:abc", "r.txt", fetch=fetcher(b"disk", "r.txt"))] if "disk.yandex" in text else []
-    svc = IngestService(sessions, store, ExtractorRegistry(), [Fake()], settings.max_file_bytes, clock)
+            return (
+                [IncomingFile("yadisk:abc", "r.txt", fetch=fetcher(b"disk", "r.txt"))]
+                if "disk.yandex" in text
+                else []
+            )
+
+    svc = IngestService(
+        sessions, store, ExtractorRegistry(), [Fake()], settings.max_file_bytes, clock
+    )
     await svc.ingest(tg(text="Методичка https://disk.yandex.ru/d/abc"))
     assert (await one(sessions, "-1001:1")).links[0].file.text == "disk"
 ```
@@ -1362,21 +1420,31 @@ class IngestService:
             extractions = await self._extract_new(result.fetched)
             final_digest = content_hash(
                 item,
-                [f.remote_id for f in files if f.remote_id not in result.failed_remote_ids],
+                [
+                    f.remote_id
+                    for f in files
+                    if f.remote_id not in result.failed_remote_ids
+                ],
             )
             return await self._write(item, final_digest, result, extractions)
 
     async def channel_cursor(self, source: Source, external_id: str) -> int:
         async with self.sessions() as s:
             cursor = await s.scalar(
-                select(Channel.cursor).where(Channel.source == source, Channel.external_id == external_id)
+                select(Channel.cursor).where(
+                    Channel.source == source, Channel.external_id == external_id
+                )
             )
             return cursor or 0
 
-    async def advance_cursor(self, source: Source, external_id: str, value: int) -> None:
+    async def advance_cursor(
+        self, source: Source, external_id: str, value: int
+    ) -> None:
         async with self.sessions.begin() as s:
             channel = await s.scalar(
-                select(Channel).where(Channel.source == source, Channel.external_id == external_id)
+                select(Channel).where(
+                    Channel.source == source, Channel.external_id == external_id
+                )
             )
             if channel is not None and value > channel.cursor:
                 channel.cursor = value
@@ -1388,7 +1456,12 @@ class IngestService:
             try:
                 files.extend(await resolver.resolve(haystack))
             except Exception:
-                log.warning("resolver %s failed for %s", type(resolver).__name__, item.external_key, exc_info=True)
+                log.warning(
+                    "resolver %s failed for %s",
+                    type(resolver).__name__,
+                    item.external_key,
+                    exc_info=True,
+                )
         unique: dict[str, IncomingFile] = {}
         for f in files:
             unique.setdefault(f.remote_id, f)
@@ -1432,7 +1505,11 @@ class IngestService:
             return {}
         shas = {f.stored.sha256 for f in fetched}
         async with self.sessions() as s:
-            known = set((await s.scalars(select(File.sha256).where(File.sha256.in_(shas)))).all())
+            known = set(
+                (
+                    await s.scalars(select(File.sha256).where(File.sha256.in_(shas)))
+                ).all()
+            )
         extractions: dict[str, Extraction] = {}
         for f in fetched:
             sha = f.stored.sha256
@@ -1533,17 +1610,25 @@ class IngestService:
 
     async def _find(self, s: AsyncSession, item: IncomingItem) -> Item | None:
         return await s.scalar(
-            select(Item).where(Item.source == item.source, Item.external_key == item.external_key)
+            select(Item).where(
+                Item.source == item.source, Item.external_key == item.external_key
+            )
         )
 
     async def _channel(self, s: AsyncSession, item: IncomingItem) -> Channel:
         channel = await s.scalar(
             select(Channel).where(
-                Channel.source == item.source, Channel.external_id == item.channel_external_id
+                Channel.source == item.source,
+                Channel.external_id == item.channel_external_id,
             )
         )
         if channel is None:
-            channel = Channel(source=item.source, external_id=item.channel_external_id, title=item.channel_title, cursor=0)
+            channel = Channel(
+                source=item.source,
+                external_id=item.channel_external_id,
+                title=item.channel_title,
+                cursor=0,
+            )
             s.add(channel)
             await s.flush()
         channel.title = item.channel_title
@@ -1599,8 +1684,13 @@ D = datetime(2026, 10, 1, tzinfo=UTC)
 
 def item(key, at, text="t", source=Source.TELEGRAM):
     return IncomingItem(
-        source=source, external_key=key, channel_external_id="c", channel_title="c",
-        kind="text", text=text, published_at=at,
+        source=source,
+        external_key=key,
+        channel_external_id="c",
+        channel_title="c",
+        kind="text",
+        text=text,
+        published_at=at,
     )
 
 
@@ -1613,7 +1703,9 @@ async def test_window_and_received(ingest, sessions, clock):
     assert [i.external_key for i in got] == ["c:2"]
     assert await feed.mark_received([got[0].id, 999]) == 1
     assert await feed.list_items(FeedQuery(D, D + timedelta(days=1))) == []
-    again = await feed.list_items(FeedQuery(D, D + timedelta(days=1), include_received=True))
+    again = await feed.list_items(
+        FeedQuery(D, D + timedelta(days=1), include_received=True)
+    )
     assert again[0].received_at == clock()
 
 
@@ -1632,7 +1724,14 @@ async def test_source_filter_and_limit(ingest, sessions, clock):
     for n in range(3):
         await ingest.ingest(item(f"c:{n}", D + timedelta(minutes=n)))
     await ingest.ingest(item("cm:1", D, source=Source.SDO))
-    assert len(await feed.list_items(FeedQuery(D, D + timedelta(days=1), source=Source.SDO))) == 1
+    assert (
+        len(
+            await feed.list_items(
+                FeedQuery(D, D + timedelta(days=1), source=Source.SDO)
+            )
+        )
+        == 1
+    )
     assert len(await feed.list_items(FeedQuery(D, D + timedelta(days=1), limit=2))) == 2
 ```
 
@@ -1663,21 +1762,31 @@ class FeedQuery:
 
 
 class FeedService:
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], clock: Callable[[], datetime] = utcnow):
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Callable[[], datetime] = utcnow,
+    ):
         self.sessions = sessions
         self.clock = clock
 
     async def list_items(self, q: FeedQuery) -> list[Item]:
         in_window = or_(
             and_(Item.published_at >= q.date_from, Item.published_at < q.date_to),
-            and_(Item.edited.is_(True), Item.edited_at >= q.date_from, Item.edited_at < q.date_to),
+            and_(
+                Item.edited.is_(True),
+                Item.edited_at >= q.date_from,
+                Item.edited_at < q.date_to,
+            ),
         )
         stmt = select(Item).where(in_window)
         if q.source is not None:
             stmt = stmt.where(Item.source == q.source)
         if not q.include_received:
             stmt = stmt.where(Item.received_at.is_(None))
-        stmt = stmt.order_by(func.coalesce(Item.edited_at, Item.published_at), Item.id).limit(q.limit)
+        stmt = stmt.order_by(
+            func.coalesce(Item.edited_at, Item.published_at), Item.id
+        ).limit(q.limit)
         async with self.sessions() as s:
             return list((await s.scalars(stmt)).unique().all())
 
@@ -1689,7 +1798,9 @@ class FeedService:
         if not ids:
             return 0
         async with self.sessions.begin() as s:
-            result = await s.execute(update(Item).where(Item.id.in_(ids)).values(received_at=self.clock()))
+            result = await s.execute(
+                update(Item).where(Item.id.in_(ids)).values(received_at=self.clock())
+            )
             return result.rowcount
 
     async def get_file(self, sha256: str) -> File | None:
@@ -1779,24 +1890,39 @@ async def seed(c):
         p = tmp / "pz.txt"
         p.write_text("x" * 5000)
         return p
-    await c.ingest.ingest(IncomingItem(
-        source=Source.SDO, external_key="cm:1", channel_external_id="3430",
-        channel_title="МИС", kind="assign", text="ПЗ1", title="Практическое задание №1",
-        published_at=datetime(2026, 10, 1, 10, tzinfo=UTC),
-        due_at=datetime(2026, 10, 22, tzinfo=UTC),
-        files=(IncomingFile("etag:1", "pz.txt", fetch=fetch),),
-    ))
+
+    await c.ingest.ingest(
+        IncomingItem(
+            source=Source.SDO,
+            external_key="cm:1",
+            channel_external_id="3430",
+            channel_title="МИС",
+            kind="assign",
+            text="ПЗ1",
+            title="Практическое задание №1",
+            published_at=datetime(2026, 10, 1, 10, tzinfo=UTC),
+            due_at=datetime(2026, 10, 22, tzinfo=UTC),
+            files=(IncomingFile("etag:1", "pz.txt", fetch=fetch),),
+        )
+    )
 
 
 def client_for(container):
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(container)), base_url="http://t")
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app(container)), base_url="http://t"
+    )
 
 
 async def test_auth_required(container):
     async with client_for(container) as client:
-        r = await client.get("/items", params={"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"})
+        r = await client.get(
+            "/items",
+            params={"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"},
+        )
         assert r.status_code == 401
-        assert (await client.get("/health", headers={"Authorization": "Bearer nope"})).status_code == 401
+        assert (
+            await client.get("/health", headers={"Authorization": "Bearer nope"})
+        ).status_code == 401
 
 
 async def test_items_flow(container):
@@ -1815,10 +1941,18 @@ async def test_items_flow(container):
         assert raw.status_code == 200 and raw.content == b"x" * 5000
         r = await client.post("/items/receive", json={"ids": [it["id"]]}, headers=H)
         assert r.json() == {"updated": 1}
-        assert (await client.get("/items", params=params, headers=H)).json()["count"] == 0
+        assert (await client.get("/items", params=params, headers=H)).json()[
+            "count"
+        ] == 0
         assert (await client.get("/items/999", headers=H)).status_code == 404
         assert (await client.get("/files/" + "0" * 64, headers=H)).status_code == 404
-        assert (await client.get("/items", params={"from": "2026-10-01T00:00:00", "to": "2026-10-02T00:00:00"}, headers=H)).status_code == 422
+        assert (
+            await client.get(
+                "/items",
+                params={"from": "2026-10-01T00:00:00", "to": "2026-10-02T00:00:00"},
+                headers=H,
+            )
+        ).status_code == 422
 
 
 async def test_admin_unknown_source(container):
@@ -1898,7 +2032,11 @@ from university_pz_parser.services.ingest import utcnow
 
 
 class HealthService:
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], clock: Callable[[], datetime] = utcnow):
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Callable[[], datetime] = utcnow,
+    ):
         self.sessions = sessions
         self.clock = clock
 
@@ -1917,7 +2055,11 @@ class HealthService:
 
     async def snapshot(self) -> list[SourceHealth]:
         async with self.sessions() as s:
-            return list((await s.scalars(select(SourceHealth).order_by(SourceHealth.source))).all())
+            return list(
+                (
+                    await s.scalars(select(SourceHealth).order_by(SourceHealth.source))
+                ).all()
+            )
 ```
 
 - [ ] **Step 4: Implement container (sources wired later)**
@@ -1960,7 +2102,9 @@ class Container:
         http = httpx.AsyncClient(timeout=60, follow_redirects=True)
         store = FileStore(settings.data_dir / "files")
         resolvers = []
-        ingest = IngestService(sessions, store, ExtractorRegistry(), resolvers, settings.max_file_bytes)
+        ingest = IngestService(
+            sessions, store, ExtractorRegistry(), resolvers, settings.max_file_bytes
+        )
         health = HealthService(sessions)
         c = cls(
             settings=settings,
@@ -2004,7 +2148,9 @@ async def require_token(
 ) -> None:
     scheme, _, token = (authorization or "").partition(" ")
     expected = c.settings.api.token.get_secret_value()
-    if scheme.lower() != "bearer" or not hmac.compare_digest(token.encode(), expected.encode()):
+    if scheme.lower() != "bearer" or not hmac.compare_digest(
+        token.encode(), expected.encode()
+    ):
         raise HTTPException(status_code=401)
 ```
 
@@ -2119,8 +2265,12 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         available_from=item.available_from,
         duplicate_of_id=item.duplicate_of_id,
         received_at=item.received_at,
-        files=[_file_out(l, item, text_limit) for l in item.links if l.detached_at is None],
-        removed_files=[_file_out(l, item, 0) for l in item.links if l.detached_at is not None],
+        files=[
+            _file_out(l, item, text_limit) for l in item.links if l.detached_at is None
+        ],
+        removed_files=[
+            _file_out(l, item, 0) for l in item.links if l.detached_at is not None
+        ],
         skipped_files=[SkippedFileOut(**s) for s in skipped],
         extra=extra,
     )
@@ -2143,7 +2293,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from university_pz_parser.api.deps import get_container
-from university_pz_parser.api.schemas import ItemOut, ItemsOut, ReceiveIn, ReceiveOut, item_out
+from university_pz_parser.api.schemas import (
+    ItemOut,
+    ItemsOut,
+    ReceiveIn,
+    ReceiveOut,
+    item_out,
+)
 from university_pz_parser.container import Container
 from university_pz_parser.enums import Source
 from university_pz_parser.services.feed import FeedQuery
@@ -2162,7 +2318,9 @@ async def list_items(
 ):
     if date_from.tzinfo is None or date_to.tzinfo is None:
         raise HTTPException(status_code=422, detail="from/to must include timezone")
-    items = await c.feed.list_items(FeedQuery(date_from, date_to, source, include_received, limit))
+    items = await c.feed.list_items(
+        FeedQuery(date_from, date_to, source, include_received, limit)
+    )
     out = [item_out(i, c.settings.feed_text_limit) for i in items]
     return ItemsOut(items=out, count=len(out))
 
@@ -2199,7 +2357,11 @@ async def get_file(sha256: str, c: Container = Depends(get_container)):
     path = c.store.resolve(row.local_path)
     if not path.exists():
         raise HTTPException(status_code=410)
-    return FileResponse(path, media_type=row.mime or "application/octet-stream", filename=row.original_name or path.name)
+    return FileResponse(
+        path,
+        media_type=row.mime or "application/octet-stream",
+        filename=row.original_name or path.name,
+    )
 ```
 
 ```python
@@ -2295,23 +2457,43 @@ from university_pz_parser.resolvers.yandex_disk import API, YandexDiskResolver
 
 @respx.mock
 async def test_file_and_dir(tmp_path):
-    respx.get(API, params={"public_key": "https://disk.yandex.ru/d/AAA"}).respond(json={
-        "type": "file", "name": "ПЗ1.docx", "mime_type": "application/x", "size": 4,
-        "sha256": "s1", "file": "https://downloader.test/1",
-    })
-    respx.get(API, params={"public_key": "https://yadi.sk/d/BBB"}).respond(json={
-        "type": "dir", "name": "Лекции",
-        "_embedded": {"items": [
-            {"type": "file", "name": "l1.pdf", "size": 2, "md5": "m1", "file": "https://downloader.test/2"},
-            {"type": "dir", "name": "sub"},
-        ]},
-    })
+    respx.get(API, params={"public_key": "https://disk.yandex.ru/d/AAA"}).respond(
+        json={
+            "type": "file",
+            "name": "ПЗ1.docx",
+            "mime_type": "application/x",
+            "size": 4,
+            "sha256": "s1",
+            "file": "https://downloader.test/1",
+        }
+    )
+    respx.get(API, params={"public_key": "https://yadi.sk/d/BBB"}).respond(
+        json={
+            "type": "dir",
+            "name": "Лекции",
+            "_embedded": {
+                "items": [
+                    {
+                        "type": "file",
+                        "name": "l1.pdf",
+                        "size": 2,
+                        "md5": "m1",
+                        "file": "https://downloader.test/2",
+                    },
+                    {"type": "dir", "name": "sub"},
+                ]
+            },
+        }
+    )
     respx.get("https://downloader.test/1").respond(content=b"docx")
     async with httpx.AsyncClient() as http:
         files = await YandexDiskResolver(http).resolve(
             "см https://disk.yandex.ru/d/AAA и https://yadi.sk/d/BBB."
         )
-        assert [(f.remote_id, f.name) for f in files] == [("yadisk:s1", "ПЗ1.docx"), ("yadisk:m1", "l1.pdf")]
+        assert [(f.remote_id, f.name) for f in files] == [
+            ("yadisk:s1", "ПЗ1.docx"),
+            ("yadisk:m1", "l1.pdf"),
+        ]
         path = await files[0].fetch(tmp_path)
         assert path.read_bytes() == b"docx"
 
@@ -2320,7 +2502,9 @@ async def test_file_and_dir(tmp_path):
 async def test_api_error_returns_empty():
     respx.get(API).respond(status_code=404)
     async with httpx.AsyncClient() as http:
-        assert await YandexDiskResolver(http).resolve("https://disk.yandex.ru/d/X") == []
+        assert (
+            await YandexDiskResolver(http).resolve("https://disk.yandex.ru/d/X") == []
+        )
 ```
 
 - [ ] **Step 2: Run, expect FAIL.**
@@ -2351,13 +2535,19 @@ class YandexDiskResolver:
         files: list[IncomingFile] = []
         for link in dict.fromkeys(LINK.findall(text or "")):
             try:
-                resp = await self.http.get(API, params={"public_key": link, "limit": 200})
+                resp = await self.http.get(
+                    API, params={"public_key": link, "limit": 200}
+                )
                 resp.raise_for_status()
             except httpx.HTTPError:
                 log.warning("yandex disk lookup failed for %s", link, exc_info=True)
                 continue
             meta = resp.json()
-            entries = [meta] if meta.get("type") == "file" else meta.get("_embedded", {}).get("items", [])
+            entries = (
+                [meta]
+                if meta.get("type") == "file"
+                else meta.get("_embedded", {}).get("items", [])
+            )
             for entry in entries[: self.max_items]:
                 if entry.get("type") == "file" and entry.get("file"):
                     files.append(self._file(link, entry))
@@ -2411,8 +2601,16 @@ class YandexDiskResolver:
 from datetime import UTC, datetime
 
 from telethon.tl.types import (
-    Document, DocumentAttributeFilename, DocumentAttributeSticker, InputStickerSetEmpty,
-    Message, MessageMediaDocument, MessageService, MessageActionPinMessage, PeerChannel, PeerUser,
+    Document,
+    DocumentAttributeFilename,
+    DocumentAttributeSticker,
+    InputStickerSetEmpty,
+    Message,
+    MessageMediaDocument,
+    MessageService,
+    MessageActionPinMessage,
+    PeerChannel,
+    PeerUser,
 )
 
 from university_pz_parser.sources.telegram.mapping import message_link, to_incoming
@@ -2422,13 +2620,27 @@ CHAT = -1002362006703
 
 
 def doc(attrs, mime="application/pdf"):
-    return Document(id=77, access_hash=1, file_reference=b"", date=DT, mime_type=mime,
-                    size=1000, dc_id=2, attributes=attrs)
+    return Document(
+        id=77,
+        access_hash=1,
+        file_reference=b"",
+        date=DT,
+        mime_type=mime,
+        size=1000,
+        dc_id=2,
+        attributes=attrs,
+    )
 
 
 def test_text_message():
-    m = Message(id=5, peer_id=PeerChannel(2362006703), date=DT, message="Сдать ПЗ1",
-                from_id=PeerUser(9), edit_date=None)
+    m = Message(
+        id=5,
+        peer_id=PeerChannel(2362006703),
+        date=DT,
+        message="Сдать ПЗ1",
+        from_id=PeerUser(9),
+        edit_date=None,
+    )
     item = to_incoming(CHAT, "ИСиТ", m)
     assert item.external_key == f"{CHAT}:5"
     assert item.kind == "text" and item.text == "Сдать ПЗ1" and item.files == ()
@@ -2437,20 +2649,43 @@ def test_text_message():
 
 
 def test_document_message():
-    m = Message(id=6, peer_id=PeerChannel(2362006703), date=DT, message="",
-                media=MessageMediaDocument(document=doc([DocumentAttributeFilename("pz1.pdf")])))
+    m = Message(
+        id=6,
+        peer_id=PeerChannel(2362006703),
+        date=DT,
+        message="",
+        media=MessageMediaDocument(
+            document=doc([DocumentAttributeFilename("pz1.pdf")])
+        ),
+    )
     item = to_incoming(CHAT, "ИСиТ", m)
     assert item.kind == "document"
     f = item.files[0]
-    assert (f.remote_id, f.name, f.size, f.mime) == ("tg:doc:77", "pz1.pdf", 1000, "application/pdf")
+    assert (f.remote_id, f.name, f.size, f.mime) == (
+        "tg:doc:77",
+        "pz1.pdf",
+        1000,
+        "application/pdf",
+    )
     assert f.fetch is not None
 
 
 def test_noise_is_skipped():
-    sticker = Message(id=7, peer_id=PeerChannel(1), date=DT, message="",
-                      media=MessageMediaDocument(document=doc(
-                          [DocumentAttributeSticker(alt="😀", stickerset=InputStickerSetEmpty())], "image/webp")))
-    service = MessageService(id=8, peer_id=PeerChannel(1), date=DT, action=MessageActionPinMessage())
+    sticker = Message(
+        id=7,
+        peer_id=PeerChannel(1),
+        date=DT,
+        message="",
+        media=MessageMediaDocument(
+            document=doc(
+                [DocumentAttributeSticker(alt="😀", stickerset=InputStickerSetEmpty())],
+                "image/webp",
+            )
+        ),
+    )
+    service = MessageService(
+        id=8, peer_id=PeerChannel(1), date=DT, action=MessageActionPinMessage()
+    )
     empty = Message(id=9, peer_id=PeerChannel(1), date=DT, message="")
     assert to_incoming(CHAT, "x", sticker) is None
     assert to_incoming(CHAT, "x", service) is None
@@ -2593,7 +2828,12 @@ def to_incoming(chat_id: int, chat_title: str, m) -> IncomingItem | None:
     if kind in DOWNLOADABLE:
         files = (_file(m, kind),)
     elif m.file is not None:
-        extra["media"] = {"name": m.file.name, "size": m.file.size, "mime": m.file.mime_type, "duration": m.file.duration}
+        extra["media"] = {
+            "name": m.file.name,
+            "size": m.file.size,
+            "mime": m.file.mime_type,
+            "duration": m.file.duration,
+        }
     return IncomingItem(
         source=Source.TELEGRAM,
         external_key=f"{chat_id}:{m.id}",
@@ -2654,7 +2894,10 @@ async def test_backfill_then_cursor(ingest, settings, clock):
     src = TelegramSource(client, ingest, settings.telegram, clock=clock)
     report = await src.sync()
     assert report.new == 2
-    assert client.calls[0] == {"offset_date": settings.telegram.backfill_from, "reverse": True}
+    assert client.calls[0] == {
+        "offset_date": settings.telegram.backfill_from,
+        "reverse": True,
+    }
     assert await ingest.channel_cursor(Source.TELEGRAM, "-1001") == 2
     client.messages.append(msg(3, "c"))
     client.calls.clear()
@@ -2697,7 +2940,13 @@ log = logging.getLogger(__name__)
 class TelegramSource:
     name = "telegram"
 
-    def __init__(self, client, ingest: IngestService, settings: TelegramSettings, clock: Callable[[], datetime] = utcnow):
+    def __init__(
+        self,
+        client,
+        ingest: IngestService,
+        settings: TelegramSettings,
+        clock: Callable[[], datetime] = utcnow,
+    ):
         self.client = client
         self.ingest = ingest
         self.settings = settings
@@ -2708,7 +2957,9 @@ class TelegramSource:
         for chat_id in self.settings.source_ids:
             try:
                 entity = await self.client.get_entity(chat_id)
-                title = get_display_name(entity) or getattr(entity, "title", str(chat_id))
+                title = get_display_name(entity) or getattr(
+                    entity, "title", str(chat_id)
+                )
                 await self._catch_up(chat_id, entity, title, report)
                 await self._recheck(chat_id, entity, title, report)
             except FloodWaitError as exc:
@@ -2716,7 +2967,9 @@ class TelegramSource:
                 break
         return report
 
-    async def _catch_up(self, chat_id: int, entity, title: str, report: SyncReport) -> None:
+    async def _catch_up(
+        self, chat_id: int, entity, title: str, report: SyncReport
+    ) -> None:
         cursor = await self.ingest.channel_cursor(Source.TELEGRAM, str(chat_id))
         if cursor:
             kwargs = {"min_id": cursor, "reverse": True}
@@ -2726,9 +2979,13 @@ class TelegramSource:
             await self._ingest(chat_id, title, m, report)
             await self.ingest.advance_cursor(Source.TELEGRAM, str(chat_id), m.id)
 
-    async def _recheck(self, chat_id: int, entity, title: str, report: SyncReport) -> None:
+    async def _recheck(
+        self, chat_id: int, entity, title: str, report: SyncReport
+    ) -> None:
         since = self.clock() - timedelta(days=self.settings.edit_recheck_days)
-        async for m in self.client.iter_messages(entity, offset_date=since, reverse=True):
+        async for m in self.client.iter_messages(
+            entity, offset_date=since, reverse=True
+        ):
             if m.edit_date:
                 await self._ingest(chat_id, title, m, report)
 
@@ -2740,7 +2997,9 @@ class TelegramSource:
     def register_handlers(self) -> None:
         chats = list(self.settings.source_ids)
         self.client.add_event_handler(self.handle_event, events.NewMessage(chats=chats))
-        self.client.add_event_handler(self.handle_event, events.MessageEdited(chats=chats))
+        self.client.add_event_handler(
+            self.handle_event, events.MessageEdited(chats=chats)
+        )
 
     async def handle_event(self, event) -> None:
         try:
@@ -2750,7 +3009,9 @@ class TelegramSource:
             if item is not None:
                 await self.ingest.ingest(item)
                 if not event.message.edit_date:
-                    await self.ingest.advance_cursor(Source.TELEGRAM, str(event.chat_id), event.message.id)
+                    await self.ingest.advance_cursor(
+                        Source.TELEGRAM, str(event.chat_id), event.message.id
+                    )
         except Exception:
             log.exception("live telegram event failed")
 ```
@@ -2774,6 +3035,7 @@ async def start(self) -> None:
     if self.tg is not None:
         await self.tg.start()
         self.jobs["telegram"].register_handlers()
+
 
 async def stop(self) -> None:
     if self.tg is not None:
@@ -2827,9 +3089,15 @@ MSK = ZoneInfo("Europe/Moscow")
 
 
 def test_parse_variants():
-    assert parse_ru_datetime("четверг, 22 октября 2026, 00:00", MSK) == datetime(2026, 10, 21, 21, 0, tzinfo=UTC)
-    assert parse_ru_datetime("7 сентября 2026, 09:00", MSK) == datetime(2026, 9, 7, 6, 0, tzinfo=UTC)
-    assert parse_ru_datetime("1 мая 2026 г., 9:05", MSK) == datetime(2026, 5, 1, 6, 5, tzinfo=UTC)
+    assert parse_ru_datetime("четверг, 22 октября 2026, 00:00", MSK) == datetime(
+        2026, 10, 21, 21, 0, tzinfo=UTC
+    )
+    assert parse_ru_datetime("7 сентября 2026, 09:00", MSK) == datetime(
+        2026, 9, 7, 6, 0, tzinfo=UTC
+    )
+    assert parse_ru_datetime("1 мая 2026 г., 9:05", MSK) == datetime(
+        2026, 5, 1, 6, 5, tzinfo=UTC
+    )
     assert parse_ru_datetime("скоро", MSK) is None
 ```
 
@@ -2887,7 +3155,12 @@ def test_folder_and_url_and_login():
 
 
 def test_garbage_does_not_crash():
-    assert html.parse_course("<html><body><li class='activity'></li></body></html>", MSK).modules == []
+    assert (
+        html.parse_course(
+            "<html><body><li class='activity'></li></body></html>", MSK
+        ).modules
+        == []
+    )
     assert html.parse_assign("<html></html>", MSK).files == []
 ```
 
@@ -2904,10 +3177,22 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 MONTHS = {
-    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
-    "июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+    "января": 1,
+    "февраля": 2,
+    "марта": 3,
+    "апреля": 4,
+    "мая": 5,
+    "июня": 6,
+    "июля": 7,
+    "августа": 8,
+    "сентября": 9,
+    "октября": 10,
+    "ноября": 11,
+    "декабря": 12,
 }
-PATTERN = re.compile(r"(\d{1,2})\s+([а-яё]+)\s+(\d{4})(?:\s*г\.)?,?\s+(\d{1,2}):(\d{2})", re.I)
+PATTERN = re.compile(
+    r"(\d{1,2})\s+([а-яё]+)\s+(\d{4})(?:\s*г\.)?,?\s+(\d{1,2}):(\d{2})", re.I
+)
 
 
 def parse_ru_datetime(text: str, tz: ZoneInfo) -> datetime | None:
@@ -3174,10 +3459,15 @@ async def test_login_and_relogin_and_head():
     login_html = (FX / "login.html").read_text()
     course_html = (FX / "course_3058.html").read_text()
     respx.get(f"{BASE}/login/index.php").respond(text=login_html)
-    post = respx.post(f"{BASE}/login/index.php").respond(status_code=303, headers={"Location": f"{BASE}/my/"})
+    post = respx.post(f"{BASE}/login/index.php").respond(
+        status_code=303, headers={"Location": f"{BASE}/my/"}
+    )
     respx.get(f"{BASE}/my/").respond(text='<script>M.cfg = {"sesskey":"SK"}</script>')
     course = respx.get(f"{BASE}/course/view.php", params={"id": "1"})
-    course.side_effect = [httpx.Response(200, text=login_html), httpx.Response(200, text=course_html)]
+    course.side_effect = [
+        httpx.Response(200, text=login_html),
+        httpx.Response(200, text=course_html),
+    ]
     respx.head(f"{BASE}/pluginfile.php/1/a.pdf").respond(headers={"ETag": '"abc"'})
     async with httpx.AsyncClient(follow_redirects=True) as http:
         sdo = SdoHttp(http, SdoSettings(url=BASE, username="u", password="p"))
@@ -3237,7 +3527,9 @@ class SdoHttp:
             raise SdoAuthError("СДО login failed")
         self.sesskey = html.parse_sesskey(resp.text)
         if self.sesskey is None:
-            self.sesskey = html.parse_sesskey((await self.http.get(self.url("/my/"))).text)
+            self.sesskey = html.parse_sesskey(
+                (await self.http.get(self.url("/my/"))).text
+            )
         if self.sesskey is None:
             raise SdoAuthError("sesskey not found after login")
 
@@ -3308,7 +3600,12 @@ from zoneinfo import ZoneInfo
 
 from university_pz_parser.domain.dto import IncomingFile
 from university_pz_parser.domain.hashing import content_hash
-from university_pz_parser.sources.sdo.html import AssignPage, CoursePage, ModuleRef, SectionRef
+from university_pz_parser.sources.sdo.html import (
+    AssignPage,
+    CoursePage,
+    ModuleRef,
+    SectionRef,
+)
 from university_pz_parser.sources.sdo.source import Course, ModuleDetails, build_items
 
 MSK = ZoneInfo("Europe/Moscow")
@@ -3316,9 +3613,17 @@ COURSE = Course(id=3430, name="Моделирование информацион
 
 
 def module(**kw):
-    base = dict(cmid=90815, kind="assign", name="Практическое задание №1", url="u",
-                section_number=2, section_name="Практическое задание №1", description="",
-                available_from=None, due_at=None)
+    base = dict(
+        cmid=90815,
+        kind="assign",
+        name="Практическое задание №1",
+        url="u",
+        section_number=2,
+        section_name="Практическое задание №1",
+        description="",
+        available_from=None,
+        due_at=None,
+    )
     base.update(kw)
     return ModuleRef(**base)
 
@@ -3336,14 +3641,19 @@ def details(status="Нет ответа", grading="Не оценено", files=(
 
 
 def test_assign_item_and_section_item():
-    page = CoursePage([SectionRef(0, "О дисциплине", "Курс про UML"), SectionRef(1, "Пустая", "")], [module()])
+    page = CoursePage(
+        [SectionRef(0, "О дисциплине", "Курс про UML"), SectionRef(1, "Пустая", "")],
+        [module()],
+    )
     items = build_items(COURSE, page, {90815: details()})
     keys = [i.external_key for i in items]
     assert keys == ["section:3430:0", "cm:90815"]
     assign = items[1]
     assert assign.title == "Практическое задание №1"
     assert assign.published_at == datetime(2026, 9, 9, 10, 42, tzinfo=UTC)
-    assert assign.channel_title == COURSE.name and assign.channel_description == "09.03.02"
+    assert (
+        assign.channel_title == COURSE.name and assign.channel_description == "09.03.02"
+    )
     assert assign.url == "u"
 
 
@@ -3400,7 +3710,9 @@ class ModuleDetails:
     uploaded: list[datetime] = field(default_factory=list)
 
 
-def build_items(course: Course, page: html.CoursePage, details: dict[int, ModuleDetails]) -> list[IncomingItem]:
+def build_items(
+    course: Course, page: html.CoursePage, details: dict[int, ModuleDetails]
+) -> list[IncomingItem]:
     common = dict(
         source=Source.SDO,
         channel_external_id=str(course.id),
@@ -3410,15 +3722,17 @@ def build_items(course: Course, page: html.CoursePage, details: dict[int, Module
     items: list[IncomingItem] = []
     for section in page.sections:
         if section.summary:
-            items.append(IncomingItem(
-                external_key=f"section:{course.id}:{section.number}",
-                kind="section",
-                title=section.name,
-                text=section.summary,
-                published_at=None,
-                extra={"section": section.name},
-                **common,
-            ))
+            items.append(
+                IncomingItem(
+                    external_key=f"section:{course.id}:{section.number}",
+                    kind="section",
+                    title=section.name,
+                    text=section.summary,
+                    published_at=None,
+                    extra={"section": section.name},
+                    **common,
+                )
+            )
     for m in page.modules:
         d = details.get(m.cmid, ModuleDetails())
         available_from = d.available_from or m.available_from
@@ -3432,27 +3746,35 @@ def build_items(course: Course, page: html.CoursePage, details: dict[int, Module
                 "grade": d.feedback.get("Оценка"),
                 "feedback": d.feedback.get("Отзыв в виде комментария"),
             }
-        items.append(IncomingItem(
-            external_key=f"cm:{m.cmid}",
-            kind=m.kind,
-            title=m.name,
-            text=text,
-            url=m.url,
-            published_at=min(dates) if dates else None,
-            available_from=available_from,
-            due_at=due_at,
-            files=d.files,
-            hashed_extra=hashed,
-            extra={"section": m.section_name, "cmid": m.cmid, "submission": d.status.get("Состояние ответа на задание")},
-            **common,
-        ))
+        items.append(
+            IncomingItem(
+                external_key=f"cm:{m.cmid}",
+                kind=m.kind,
+                title=m.name,
+                text=text,
+                url=m.url,
+                published_at=min(dates) if dates else None,
+                available_from=available_from,
+                due_at=due_at,
+                files=d.files,
+                hashed_extra=hashed,
+                extra={
+                    "section": m.section_name,
+                    "cmid": m.cmid,
+                    "submission": d.status.get("Состояние ответа на задание"),
+                },
+                **common,
+            )
+        )
     return items
 
 
 class SdoSource:
     name = "sdo"
 
-    def __init__(self, sdo: SdoHttp, ingest: IngestService, settings: SdoSettings, tz: ZoneInfo):
+    def __init__(
+        self, sdo: SdoHttp, ingest: IngestService, settings: SdoSettings, tz: ZoneInfo
+    ):
         self.sdo = sdo
         self.ingest = ingest
         self.settings = settings
@@ -3463,7 +3785,9 @@ class SdoSource:
         await self.sdo.login()
         for course in await self.courses():
             try:
-                page = html.parse_course(await self.sdo.page(f"/course/view.php?id={course.id}"), self.tz)
+                page = html.parse_course(
+                    await self.sdo.page(f"/course/view.php?id={course.id}"), self.tz
+                )
                 details = {m.cmid: await self._details(m) for m in page.modules}
                 for item in build_items(course, page, details):
                     report.count(await self.ingest.ingest(item))
@@ -3500,11 +3824,22 @@ class SdoSource:
             if m.kind == "resource" and m.url:
                 final = await self.sdo.resolve_redirect(m.url)
                 if "pluginfile.php" in final:
-                    return ModuleDetails(files=(await self._file(final, html.file_name_from_url(final)),))
-                return ModuleDetails(files=tuple([await self._file(f.url, f.name) for f in html.parse_folder(await self.sdo.page(m.url))]))
+                    return ModuleDetails(
+                        files=(await self._file(final, html.file_name_from_url(final)),)
+                    )
+                return ModuleDetails(
+                    files=tuple(
+                        [
+                            await self._file(f.url, f.name)
+                            for f in html.parse_folder(await self.sdo.page(m.url))
+                        ]
+                    )
+                )
             if m.kind == "folder" and m.url:
                 found = html.parse_folder(await self.sdo.page(m.url))
-                return ModuleDetails(files=tuple([await self._file(f.url, f.name) for f in found]))
+                return ModuleDetails(
+                    files=tuple([await self._file(f.url, f.name) for f in found])
+                )
             if m.kind == "url" and m.url:
                 target = html.parse_url_module(await self.sdo.page(m.url))
                 return ModuleDetails(text=target or "")
@@ -3527,7 +3862,9 @@ Wire into `Container.build` when `with_sources`:
 
 ```python
 sdo_http = httpx.AsyncClient(timeout=120, follow_redirects=True)
-c.jobs["sdo"] = SdoSource(SdoHttp(sdo_http, settings.sdo), ingest, settings.sdo, ZoneInfo(settings.tz))
+c.jobs["sdo"] = SdoSource(
+    SdoHttp(sdo_http, settings.sdo), ingest, settings.sdo, ZoneInfo(settings.tz)
+)
 c.extra_clients.append(sdo_http)
 ```
 
@@ -3604,25 +3941,76 @@ async def test_contents_to_pages():
 
     def server(request):
         fn = dict(httpx.QueryParams(request.content.decode()))["wsfunction"]
-        return httpx.Response(200, json={
-            "core_course_get_contents": [
-                {"section": 0, "name": "Общее", "summary": "<p>Про курс</p>", "modules": [
-                    {"id": 90905, "modname": "assign", "name": "Проект", "url": f"{BASE}/mod/assign/view.php?id=90905",
-                     "instance": 7, "description": "", "dates": [
-                         {"label": "Срок сдачи:", "timestamp": 1789592400}]},
-                    {"id": 92422, "modname": "resource", "name": "Лекция 1", "url": "u", "contents": [
-                        {"type": "file", "filename": "l1.pdf", "fileurl": f"{BASE}/webservice/pluginfile.php/1/l1.pdf?forcedownload=1",
-                         "timemodified": 1789000000, "filesize": 10, "mimetype": "application/pdf"}]},
-                ]},
-            ],
-            "mod_assign_get_assignments": {"courses": [{"id": 3058, "assignments": [
-                {"id": 7, "cmid": 90905, "intro": "<p>Сделать проект</p>", "duedate": 1789592400,
-                 "allowsubmissionsfromdate": 1789506000,
-                 "introattachments": [{"filename": "p.docx", "fileurl": f"{BASE}/webservice/pluginfile.php/2/p.docx",
-                                       "timemodified": 1789000001, "filesize": 5, "mimetype": "x"}]}]}]},
-            "mod_assign_get_submission_status": {"lastattempt": {"submission": {"status": "submitted"}},
-                                                 "feedback": {"gradefordisplay": "5", "plugins": []}},
-        }[fn])
+        return httpx.Response(
+            200,
+            json={
+                "core_course_get_contents": [
+                    {
+                        "section": 0,
+                        "name": "Общее",
+                        "summary": "<p>Про курс</p>",
+                        "modules": [
+                            {
+                                "id": 90905,
+                                "modname": "assign",
+                                "name": "Проект",
+                                "url": f"{BASE}/mod/assign/view.php?id=90905",
+                                "instance": 7,
+                                "description": "",
+                                "dates": [
+                                    {"label": "Срок сдачи:", "timestamp": 1789592400}
+                                ],
+                            },
+                            {
+                                "id": 92422,
+                                "modname": "resource",
+                                "name": "Лекция 1",
+                                "url": "u",
+                                "contents": [
+                                    {
+                                        "type": "file",
+                                        "filename": "l1.pdf",
+                                        "fileurl": f"{BASE}/webservice/pluginfile.php/1/l1.pdf?forcedownload=1",
+                                        "timemodified": 1789000000,
+                                        "filesize": 10,
+                                        "mimetype": "application/pdf",
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                "mod_assign_get_assignments": {
+                    "courses": [
+                        {
+                            "id": 3058,
+                            "assignments": [
+                                {
+                                    "id": 7,
+                                    "cmid": 90905,
+                                    "intro": "<p>Сделать проект</p>",
+                                    "duedate": 1789592400,
+                                    "allowsubmissionsfromdate": 1789506000,
+                                    "introattachments": [
+                                        {
+                                            "filename": "p.docx",
+                                            "fileurl": f"{BASE}/webservice/pluginfile.php/2/p.docx",
+                                            "timemodified": 1789000001,
+                                            "filesize": 5,
+                                            "mimetype": "x",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "mod_assign_get_submission_status": {
+                    "lastattempt": {"submission": {"status": "submitted"}},
+                    "feedback": {"gradefordisplay": "5", "plugins": []},
+                },
+            }[fn],
+        )
 
     respx.post(f"{BASE}/webservice/rest/server.php").mock(side_effect=server)
     async with httpx.AsyncClient() as http:
@@ -3633,7 +4021,10 @@ async def test_contents_to_pages():
     assert [m.cmid for m in page.modules] == [90905, 92422]
     d = details[90905]
     assert d.text == "Сделать проект"
-    assert d.files[0].remote_id.startswith("rest:") and "token=T" not in d.files[0].remote_id
+    assert (
+        d.files[0].remote_id.startswith("rest:")
+        and "token=T" not in d.files[0].remote_id
+    )
     assert d.status["Состояние ответа на задание"] == "submitted"
     assert d.feedback["Оценка"] == "5"
     assert details[92422].files[0].name == "l1.pdf"
@@ -3690,10 +4081,16 @@ class SdoRest:
         return self._token
 
     async def call(self, fn: str, **params: Any) -> Any:
-        data: dict[str, Any] = {"wstoken": self._token, "wsfunction": fn, "moodlewsrestformat": "json"}
+        data: dict[str, Any] = {
+            "wstoken": self._token,
+            "wsfunction": fn,
+            "moodlewsrestformat": "json",
+        }
         for key, value in params.items():
             _flatten(key, value, data)
-        resp = await self.http.post(f"{self.base}/webservice/rest/server.php", data=data)
+        resp = await self.http.post(
+            f"{self.base}/webservice/rest/server.php", data=data
+        )
         resp.raise_for_status()
         body = resp.json()
         if isinstance(body, dict) and body.get("exception"):
@@ -3720,7 +4117,9 @@ class SdoRest:
             mime=f.get("mimetype"),
             size=f.get("filesize"),
             url=url,
-            fetch=SdoHttp(self.http, self.settings).fetcher(download, f.get("filename") or ""),
+            fetch=SdoHttp(self.http, self.settings).fetcher(
+                download, f.get("filename") or ""
+            ),
         )
 
     async def course_pages(self, course_id: int):
@@ -3728,10 +4127,20 @@ class SdoRest:
 
         contents = await self.call("core_course_get_contents", courseid=course_id)
         assigns = await self.call("mod_assign_get_assignments", courseids=[course_id])
-        by_cmid = {a["cmid"]: a for c in assigns.get("courses", []) for a in c.get("assignments", [])}
+        by_cmid = {
+            a["cmid"]: a
+            for c in assigns.get("courses", [])
+            for a in c.get("assignments", [])
+        }
         sections, modules, details = [], [], {}
         for sec in contents:
-            sections.append(html.SectionRef(sec["section"], sec.get("name", ""), html.html_to_text(sec.get("summary"))))
+            sections.append(
+                html.SectionRef(
+                    sec["section"],
+                    sec.get("name", ""),
+                    html.html_to_text(sec.get("summary")),
+                )
+            )
             for m in sec.get("modules", []):
                 dates = defaultdict(lambda: None)
                 for d in m.get("dates", []):
@@ -3740,15 +4149,33 @@ class SdoRest:
                         dates["start"] = _ts(d.get("timestamp"))
                     elif label.startswith(html.DUE_LABELS):
                         dates["due"] = _ts(d.get("timestamp"))
-                modules.append(html.ModuleRef(
-                    cmid=m["id"], kind=m["modname"], name=m["name"], url=m.get("url"),
-                    section_number=sec["section"], section_name=sec.get("name", ""),
-                    description=html.html_to_text(m.get("description")),
-                    available_from=dates["start"], due_at=dates["due"],
-                ))
-                files = [self._file(f) for f in m.get("contents", []) if f.get("type") == "file"]
+                modules.append(
+                    html.ModuleRef(
+                        cmid=m["id"],
+                        kind=m["modname"],
+                        name=m["name"],
+                        url=m.get("url"),
+                        section_number=sec["section"],
+                        section_name=sec.get("name", ""),
+                        description=html.html_to_text(m.get("description")),
+                        available_from=dates["start"],
+                        due_at=dates["due"],
+                    )
+                )
+                files = [
+                    self._file(f)
+                    for f in m.get("contents", [])
+                    if f.get("type") == "file"
+                ]
                 if m["modname"] == "url":
-                    target = next((f.get("fileurl") for f in m.get("contents", []) if f.get("type") == "url"), "")
+                    target = next(
+                        (
+                            f.get("fileurl")
+                            for f in m.get("contents", [])
+                            if f.get("type") == "url"
+                        ),
+                        "",
+                    )
                     details[m["id"]] = ModuleDetails(text=target or "")
                     continue
                 if m["modname"] != "assign" or m["id"] not in by_cmid:
@@ -3756,27 +4183,46 @@ class SdoRest:
                     continue
                 a = by_cmid[m["id"]]
                 attachments = a.get("introattachments", [])
-                status = await self.call("mod_assign_get_submission_status", assignid=a["id"])
+                status = await self.call(
+                    "mod_assign_get_submission_status", assignid=a["id"]
+                )
                 feedback = status.get("feedback") or {}
                 comment = next(
-                    (p["editorfields"][0]["text"] for p in feedback.get("plugins", [])
-                     if p.get("type") == "comments" and p.get("editorfields")),
+                    (
+                        p["editorfields"][0]["text"]
+                        for p in feedback.get("plugins", [])
+                        if p.get("type") == "comments" and p.get("editorfields")
+                    ),
                     None,
                 )
                 details[m["id"]] = ModuleDetails(
                     text=html.html_to_text(a.get("intro")),
                     files=tuple(self._file(f) for f in attachments),
                     status={
-                        "Состояние ответа на задание": ((status.get("lastattempt") or {}).get("submission") or {}).get("status"),
-                        "Состояние оценивания": (status.get("lastattempt") or {}).get("gradingstatus"),
+                        "Состояние ответа на задание": (
+                            (status.get("lastattempt") or {}).get("submission") or {}
+                        ).get("status"),
+                        "Состояние оценивания": (status.get("lastattempt") or {}).get(
+                            "gradingstatus"
+                        ),
                     },
-                    feedback={k: v for k, v in {
-                        "Оценка": feedback.get("gradefordisplay"),
-                        "Отзыв в виде комментария": html.html_to_text(comment) if comment else None,
-                    }.items() if v},
+                    feedback={
+                        k: v
+                        for k, v in {
+                            "Оценка": feedback.get("gradefordisplay"),
+                            "Отзыв в виде комментария": html.html_to_text(comment)
+                            if comment
+                            else None,
+                        }.items()
+                        if v
+                    },
                     available_from=_ts(a.get("allowsubmissionsfromdate")),
                     due_at=_ts(a.get("duedate")),
-                    uploaded=[t for t in (_ts(f.get("timemodified")) for f in attachments) if t],
+                    uploaded=[
+                        t
+                        for t in (_ts(f.get("timemodified")) for f in attachments)
+                        if t
+                    ],
                 )
         return html.CoursePage(sections, modules), details
 ```
@@ -3887,7 +4333,9 @@ from university_pz_parser.sources.telegram.mapping import message_link
 def _text(raw) -> str:
     if isinstance(raw, str):
         return raw
-    return "".join(part if isinstance(part, str) else part.get("text", "") for part in raw)
+    return "".join(
+        part if isinstance(part, str) else part.get("text", "") for part in raw
+    )
 
 
 def _ts(value: str | None) -> datetime | None:
@@ -3904,7 +4352,12 @@ def _local_file(base: Path, rel: str, msg_id: int) -> IncomingFile | None:
         shutil.copyfile(path, target)
         return target
 
-    return IncomingFile(remote_id=f"export:{msg_id}:{rel}", name=path.name, size=path.stat().st_size, fetch=fetch)
+    return IncomingFile(
+        remote_id=f"export:{msg_id}:{rel}",
+        name=path.name,
+        size=path.stat().st_size,
+        fetch=fetch,
+    )
 
 
 def export_to_items(data: dict, chat_id: int, base: Path) -> Iterator[IncomingItem]:
@@ -3929,7 +4382,12 @@ def export_to_items(data: dict, chat_id: int, base: Path) -> Iterator[IncomingIt
             author=m.get("from"),
             url=message_link(chat_id, m["id"]),
             files=(f,) if f else (),
-            extra={"msg_id": m["id"], "reply_to": m.get("reply_to_message_id"), "forwarded_from": m.get("forwarded_from"), "imported": True},
+            extra={
+                "msg_id": m["id"],
+                "reply_to": m.get("reply_to_message_id"),
+                "forwarded_from": m.get("forwarded_from"),
+                "imported": True,
+            },
         )
 ```
 
@@ -3945,9 +4403,21 @@ def build_scheduler(c: Container) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=c.settings.tz)
     common = {"max_instances": 1, "coalesce": True, "misfire_grace_time": 600}
     if "telegram" in c.jobs:
-        scheduler.add_job(c.runner.run, CronTrigger(minute=5), args=[c.jobs["telegram"]], id="telegram_hourly", **common)
+        scheduler.add_job(
+            c.runner.run,
+            CronTrigger(minute=5),
+            args=[c.jobs["telegram"]],
+            id="telegram_hourly",
+            **common,
+        )
     if "sdo" in c.jobs:
-        scheduler.add_job(c.runner.run, CronTrigger(hour="7-22/3", minute=20), args=[c.jobs["sdo"]], id="sdo", **common)
+        scheduler.add_job(
+            c.runner.run,
+            CronTrigger(hour="7-22/3", minute=20),
+            args=[c.jobs["sdo"]],
+            id="sdo",
+            **common,
+        )
     return scheduler
 ```
 
@@ -4048,7 +4518,9 @@ def sync(source: str) -> None:
 
 
 @app.command("import-export")
-def import_export(file: Path, chat_id: int = typer.Option(..., help="marked id, e.g. -1002362006703")) -> None:
+def import_export(
+    file: Path, chat_id: int = typer.Option(..., help="marked id, e.g. -1002362006703")
+) -> None:
     from university_pz_parser.cli.import_export import export_to_items
     from university_pz_parser.container import Container
 
@@ -4076,7 +4548,9 @@ def serve() -> None:
 
     configure_logging()
     s = get_settings()
-    uvicorn.run(create_app(), host=s.api.host, port=s.api.port, workers=1, log_config=None)
+    uvicorn.run(
+        create_app(), host=s.api.host, port=s.api.port, workers=1, log_config=None
+    )
 
 
 if __name__ == "__main__":
@@ -4138,10 +4612,19 @@ from study_inbox_mcp import server
 def test_tools_call_api(tmp_path, monkeypatch):
     monkeypatch.setenv("INBOX_DOWNLOAD_DIR", str(tmp_path))
     server.configure("https://inbox.test", "tok")
-    items = respx.get("https://inbox.test/items").respond(json={"items": [], "count": 0})
+    items = respx.get("https://inbox.test/items").respond(
+        json={"items": [], "count": 0}
+    )
     respx.post("https://inbox.test/items/receive").respond(json={"updated": 2})
-    respx.get("https://inbox.test/files/abc").respond(content=b"pdf", headers={"content-disposition": 'attachment; filename="l1.pdf"'})
-    assert server.get_items("2026-10-01T00:00:00+03:00", "2026-10-02T00:00:00+03:00")["count"] == 0
+    respx.get("https://inbox.test/files/abc").respond(
+        content=b"pdf", headers={"content-disposition": 'attachment; filename="l1.pdf"'}
+    )
+    assert (
+        server.get_items("2026-10-01T00:00:00+03:00", "2026-10-02T00:00:00+03:00")[
+            "count"
+        ]
+        == 0
+    )
     assert items.calls[0].request.headers["Authorization"] == "Bearer tok"
     assert items.calls[0].request.url.params["from"] == "2026-10-01T00:00:00+03:00"
     assert server.mark_received([1, 2]) == {"updated": 2}
@@ -4166,7 +4649,9 @@ _http: httpx.Client | None = None
 
 def configure(base_url: str, token: str) -> None:
     global _http
-    _http = httpx.Client(base_url=base_url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    _http = httpx.Client(
+        base_url=base_url, headers={"Authorization": f"Bearer {token}"}, timeout=60
+    )
 
 
 def _client() -> httpx.Client:
@@ -4181,7 +4666,13 @@ def _json(resp: httpx.Response):
 
 
 @mcp.tool()
-def get_items(date_from: str, date_to: str, source: str | None = None, include_received: bool = False, limit: int = 200) -> dict:
+def get_items(
+    date_from: str,
+    date_to: str,
+    source: str | None = None,
+    include_received: bool = False,
+    limit: int = 200,
+) -> dict:
     """Учебные материалы (сообщения Telegram-чатов и элементы курсов СДО), опубликованные или изменённые в окне [date_from, date_to).
 
     date_from/date_to — ISO 8601 с часовым поясом, например 2026-10-01T00:00:00+03:00.
@@ -4189,7 +4680,12 @@ def get_items(date_from: str, date_to: str, source: str | None = None, include_r
     У изменённых элементов edited=true, есть previous_text, removed_files и files[].added_on_edit.
     Тексты файлов обрезаны до 4000 символов (text_truncated) — полный текст через get_item.
     После обработки вызови mark_received с id обработанных элементов."""
-    params = {"from": date_from, "to": date_to, "include_received": include_received, "limit": limit}
+    params = {
+        "from": date_from,
+        "to": date_to,
+        "include_received": include_received,
+        "limit": limit,
+    }
     if source:
         params["source"] = source
     return _json(_client().get("/items", params=params))
@@ -4212,9 +4708,16 @@ def get_file(sha256: str) -> str:
     """Скачать исходный файл по sha256 на этот компьютер и вернуть путь к нему."""
     resp = _client().get(f"/files/{sha256}")
     resp.raise_for_status()
-    match = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', resp.headers.get("content-disposition", ""))
-    name = httpx.URL("x:/" + (match.group(1) if match else "file")).path.rsplit("/", 1)[-1]
-    target_dir = Path(os.environ.get("INBOX_DOWNLOAD_DIR", Path.home() / "Downloads" / "study-inbox")).expanduser()
+    match = re.search(
+        r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?',
+        resp.headers.get("content-disposition", ""),
+    )
+    name = httpx.URL("x:/" + (match.group(1) if match else "file")).path.rsplit("/", 1)[
+        -1
+    ]
+    target_dir = Path(
+        os.environ.get("INBOX_DOWNLOAD_DIR", Path.home() / "Downloads" / "study-inbox")
+    ).expanduser()
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{sha256}_{name}"
     target.write_bytes(resp.content)

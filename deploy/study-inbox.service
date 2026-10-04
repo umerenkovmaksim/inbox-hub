@@ -1,0 +1,17 @@
+[Unit]
+Description=Study Inbox
+After=network-online.target
+
+[Service]
+User=studyinbox
+WorkingDirectory=/opt/study-inbox
+EnvironmentFile=/opt/study-inbox/.env
+ExecStart=/opt/study-inbox/.venv/bin/university-pz-parser serve
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/study-inbox/data
+
+[Install]
+WantedBy=multi-user.target
