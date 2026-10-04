@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import university_pz_parser.db.types
 
 
 # revision identifiers, used by Alembic.
