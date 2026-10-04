@@ -1,0 +1,22 @@
+services:
+  study-inbox:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${API_PUBLISH_PORT:-8000}:8000"
+    environment:
+      TELEGRAM__API_ID: ${TELEGRAM__API_ID:?}
+      TELEGRAM__API_HASH: ${TELEGRAM__API_HASH:?}
+      TELEGRAM__SOURCE_IDS: ${TELEGRAM__SOURCE_IDS:?}
+      TELEGRAM__BACKFILL_FROM: ${TELEGRAM__BACKFILL_FROM:-2026-09-01T00:00:00+03:00}
+      SDO__URL: ${SDO__URL:-https://sdo.timacad.ru}
+      SDO__USERNAME: ${SDO__USERNAME:?}
+      SDO__PASSWORD: ${SDO__PASSWORD:?}
+      SDO__EXCLUDE_COURSE_IDS: ${SDO__EXCLUDE_COURSE_IDS:-[]}
+      SDO__BACKEND: ${SDO__BACKEND:-html}
+      API__TOKEN: ${API__TOKEN:?}
+    volumes:
+      - inbox-data:/app/data
+
+volumes:
+  inbox-data:
