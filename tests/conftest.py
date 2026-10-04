@@ -1,10 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from university_pz_parser.services.ingest import IngestService
 
 from university_pz_parser.db.session import create_all, make_engine, make_sessions
 from university_pz_parser.extractors.registry import ExtractorRegistry
+from university_pz_parser.services.ingest import IngestService
 from university_pz_parser.settings import (
     ApiSettings,
     DatabaseSettings,

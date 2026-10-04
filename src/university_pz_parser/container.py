@@ -11,6 +11,8 @@ from university_pz_parser.services.health import HealthService
 from university_pz_parser.services.ingest import IngestService
 from university_pz_parser.services.jobs import Job, JobRunner
 from university_pz_parser.settings import Settings
+from university_pz_parser.sources.telegram.client import TelegramClientManager
+from university_pz_parser.sources.telegram.source import TelegramSource
 from university_pz_parser.storage.files import FileStore
 
 
@@ -26,7 +28,7 @@ class Container:
     health: HealthService
     runner: JobRunner
     jobs: dict[str, Job] = field(default_factory=dict)
-    tg: object | None = None
+    tg: TelegramClientManager | None = None
 
     @classmethod
     async def build(cls, settings: Settings, with_sources: bool = True) -> "Container":
@@ -50,11 +52,19 @@ class Container:
             health=health,
             runner=JobRunner(health),
         )
+        if with_sources:
+            tg = TelegramClientManager(settings.telegram)
+            c.tg = tg
+            c.jobs["telegram"] = TelegramSource(tg.client, ingest, settings.telegram)
         return c
 
     async def start(self) -> None:
-        pass
+        if self.tg is not None:
+            await self.tg.start()
+            self.jobs["telegram"].register_handlers()
 
     async def stop(self) -> None:
+        if self.tg is not None:
+            await self.tg.stop()
         await self.http.aclose()
         await self.engine.dispose()
