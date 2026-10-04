@@ -13,6 +13,7 @@ from university_pz_parser.services.ingest import IngestService
 from university_pz_parser.services.jobs import Job, JobRunner
 from university_pz_parser.settings import Settings
 from university_pz_parser.sources.sdo.client import SdoHttp
+from university_pz_parser.sources.sdo.rest import SdoRest
 from university_pz_parser.sources.sdo.source import SdoSource
 from university_pz_parser.sources.telegram.client import TelegramClientManager
 from university_pz_parser.sources.telegram.source import TelegramSource
@@ -67,6 +68,7 @@ class Container:
                 ingest,
                 settings.sdo,
                 ZoneInfo(settings.tz),
+                rest=SdoRest(sdo_http, settings.sdo),
             )
         return c
 

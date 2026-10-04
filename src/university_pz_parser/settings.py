@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,7 @@ class SdoSettings(BaseModel):
     username: str
     password: SecretStr
     exclude_course_ids: list[int] = []
+    backend: Literal["html", "auto"] = "html"
 
 
 class DatabaseSettings(BaseModel):

@@ -95,8 +95,14 @@ class SdoSource:
     name = "sdo"
 
     def __init__(
-        self, sdo: SdoHttp, ingest: IngestService, settings: SdoSettings, tz: ZoneInfo
+        self,
+        sdo: SdoHttp,
+        ingest: IngestService,
+        settings: SdoSettings,
+        tz: ZoneInfo,
+        rest=None,
     ):
+        self.rest = rest
         self.sdo = sdo
         self.ingest = ingest
         self.settings = settings
@@ -105,6 +111,21 @@ class SdoSource:
     async def sync(self) -> SyncReport:
         report = SyncReport(self.name)
         await self.sdo.login()
+        rest_token = None
+        if self.rest is not None and self.settings.backend == "auto":
+            rest_token = await self.rest.token()
+        if rest_token:
+            report.warnings.append("sdo backend: rest")
+            for course in await self.rest.courses(self.settings.exclude_course_ids):
+                try:
+                    page, details = await self.rest.course_pages(course.id)
+                    for item in build_items(course, page, details):
+                        report.count(await self.ingest.ingest(item))
+                except Exception as exc:
+                    log.exception("sdo rest course %s failed", course.id)
+                    report.warnings.append(f"course {course.id}: {exc!r}")
+            return report
+        report.warnings.append("sdo backend: html")
         for course in await self.courses():
             try:
                 page = html.parse_course(
