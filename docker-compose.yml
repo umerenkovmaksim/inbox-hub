@@ -2,8 +2,6 @@ services:
   study-inbox:
     build: .
     restart: unless-stopped
-    ports:
-      - "${API_PUBLISH_PORT:-8000}:8000"
     environment:
       TELEGRAM__API_ID: ${TELEGRAM__API_ID:?}
       TELEGRAM__API_HASH: ${TELEGRAM__API_HASH:?}
