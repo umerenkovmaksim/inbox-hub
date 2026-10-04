@@ -1,0 +1,178 @@
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from university_pz_parser.domain.dto import IncomingFile, IncomingItem
+from university_pz_parser.enums import Source
+from university_pz_parser.services.ingest import IngestService
+from university_pz_parser.services.jobs import SyncReport
+from university_pz_parser.settings import SdoSettings
+from university_pz_parser.sources.sdo import html
+from university_pz_parser.sources.sdo.client import SdoHttp
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Course:
+    id: int
+    name: str
+    summary: str | None
+
+
+@dataclass(frozen=True)
+class ModuleDetails:
+    text: str = ""
+    files: tuple[IncomingFile, ...] = ()
+    status: dict[str, str] = field(default_factory=dict)
+    feedback: dict[str, str] = field(default_factory=dict)
+    available_from: datetime | None = None
+    due_at: datetime | None = None
+    uploaded: list[datetime] = field(default_factory=list)
+
+
+def build_items(
+    course: Course, page: html.CoursePage, details: dict[int, ModuleDetails]
+) -> list[IncomingItem]:
+    common = dict(
+        source=Source.SDO,
+        channel_external_id=str(course.id),
+        channel_title=course.name,
+        channel_description=course.summary,
+    )
+    items: list[IncomingItem] = []
+    for section in page.sections:
+        if section.summary:
+            items.append(
+                IncomingItem(
+                    external_key=f"section:{course.id}:{section.number}",
+                    kind="section",
+                    title=section.name,
+                    text=section.summary,
+                    published_at=None,
+                    extra={"section": section.name},
+                    **common,
+                )
+            )
+    for m in page.modules:
+        d = details.get(m.cmid, ModuleDetails())
+        available_from = d.available_from or m.available_from
+        due_at = d.due_at or m.due_at
+        dates = [x for x in [*d.uploaded, available_from] if x is not None]
+        text = "\n\n".join(filter(None, [m.description, d.text]))
+        hashed = {}
+        if m.kind == "assign":
+            hashed = {
+                "grading": d.status.get("Состояние оценивания"),
+                "grade": d.feedback.get("Оценка"),
+                "feedback": d.feedback.get("Отзыв в виде комментария"),
+            }
+        items.append(
+            IncomingItem(
+                external_key=f"cm:{m.cmid}",
+                kind=m.kind,
+                title=m.name,
+                text=text,
+                url=m.url,
+                published_at=min(dates) if dates else None,
+                available_from=available_from,
+                due_at=due_at,
+                files=d.files,
+                hashed_extra=hashed,
+                extra={
+                    "section": m.section_name,
+                    "cmid": m.cmid,
+                    "submission": d.status.get("Состояние ответа на задание"),
+                },
+                **common,
+            )
+        )
+    return items
+
+
+class SdoSource:
+    name = "sdo"
+
+    def __init__(
+        self, sdo: SdoHttp, ingest: IngestService, settings: SdoSettings, tz: ZoneInfo
+    ):
+        self.sdo = sdo
+        self.ingest = ingest
+        self.settings = settings
+        self.tz = tz
+
+    async def sync(self) -> SyncReport:
+        report = SyncReport(self.name)
+        await self.sdo.login()
+        for course in await self.courses():
+            try:
+                page = html.parse_course(
+                    await self.sdo.page(f"/course/view.php?id={course.id}"), self.tz
+                )
+                details = {m.cmid: await self._details(m) for m in page.modules}
+                for item in build_items(course, page, details):
+                    report.count(await self.ingest.ingest(item))
+            except Exception as exc:
+                log.exception("sdo course %s failed", course.id)
+                report.warnings.append(f"course {course.id}: {exc!r}")
+        return report
+
+    async def courses(self) -> list[Course]:
+        data = await self.sdo.ajax(
+            "core_course_get_enrolled_courses_by_timeline_classification",
+            {"classification": "all", "limit": 0, "offset": 0, "sort": "fullname"},
+        )
+        excluded = set(self.settings.exclude_course_ids)
+        return [
+            Course(c["id"], c["fullname"], html.html_to_text(c.get("summary")) or None)
+            for c in data["courses"]
+            if c["id"] not in excluded
+        ]
+
+    async def _details(self, m: html.ModuleRef) -> ModuleDetails:
+        try:
+            if m.kind == "assign" and m.url:
+                page = html.parse_assign(await self.sdo.page(m.url), self.tz)
+                return ModuleDetails(
+                    text=page.intro,
+                    files=tuple([await self._file(f.url, f.name) for f in page.files]),
+                    status=page.status,
+                    feedback=page.feedback,
+                    available_from=page.available_from,
+                    due_at=page.due_at,
+                    uploaded=[f.uploaded_at for f in page.files if f.uploaded_at],
+                )
+            if m.kind == "resource" and m.url:
+                final = await self.sdo.resolve_redirect(m.url)
+                if "pluginfile.php" in final:
+                    return ModuleDetails(
+                        files=(await self._file(final, html.file_name_from_url(final)),)
+                    )
+                return ModuleDetails(
+                    files=tuple(
+                        [
+                            await self._file(f.url, f.name)
+                            for f in html.parse_folder(await self.sdo.page(m.url))
+                        ]
+                    )
+                )
+            if m.kind == "folder" and m.url:
+                found = html.parse_folder(await self.sdo.page(m.url))
+                return ModuleDetails(
+                    files=tuple([await self._file(f.url, f.name) for f in found])
+                )
+            if m.kind == "url" and m.url:
+                target = html.parse_url_module(await self.sdo.page(m.url))
+                return ModuleDetails(text=target or "")
+        except Exception:
+            log.warning("sdo module %s details failed", m.cmid, exc_info=True)
+        return ModuleDetails()
+
+    async def _file(self, url: str, name: str) -> IncomingFile:
+        return IncomingFile(
+            remote_id=await self.sdo.head_remote_id(url),
+            name=name,
+            url=url,
+            fetch=self.sdo.fetcher(url, name),
+        )

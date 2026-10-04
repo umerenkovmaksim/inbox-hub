@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -11,6 +12,8 @@ from university_pz_parser.services.health import HealthService
 from university_pz_parser.services.ingest import IngestService
 from university_pz_parser.services.jobs import Job, JobRunner
 from university_pz_parser.settings import Settings
+from university_pz_parser.sources.sdo.client import SdoHttp
+from university_pz_parser.sources.sdo.source import SdoSource
 from university_pz_parser.sources.telegram.client import TelegramClientManager
 from university_pz_parser.sources.telegram.source import TelegramSource
 from university_pz_parser.storage.files import FileStore
@@ -29,6 +32,7 @@ class Container:
     runner: JobRunner
     jobs: dict[str, Job] = field(default_factory=dict)
     tg: TelegramClientManager | None = None
+    extra_clients: list[httpx.AsyncClient] = field(default_factory=list)
 
     @classmethod
     async def build(cls, settings: Settings, with_sources: bool = True) -> "Container":
@@ -56,6 +60,14 @@ class Container:
             tg = TelegramClientManager(settings.telegram)
             c.tg = tg
             c.jobs["telegram"] = TelegramSource(tg.client, ingest, settings.telegram)
+            sdo_http = httpx.AsyncClient(timeout=120, follow_redirects=True)
+            c.extra_clients.append(sdo_http)
+            c.jobs["sdo"] = SdoSource(
+                SdoHttp(sdo_http, settings.sdo),
+                ingest,
+                settings.sdo,
+                ZoneInfo(settings.tz),
+            )
         return c
 
     async def start(self) -> None:
@@ -66,5 +78,7 @@ class Container:
     async def stop(self) -> None:
         if self.tg is not None:
             await self.tg.stop()
+        for client in self.extra_clients:
+            await client.aclose()
         await self.http.aclose()
         await self.engine.dispose()
