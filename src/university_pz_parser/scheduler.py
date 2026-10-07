@@ -18,7 +18,7 @@ def build_scheduler(c: Container) -> AsyncIOScheduler:
     if "sdo" in c.jobs:
         scheduler.add_job(
             c.runner.run,
-            CronTrigger(hour="7-22/3", minute=20),
+            CronTrigger(hour="5-22/1", minute=20),
             args=[c.jobs["sdo"]],
             id="sdo",
             **common,
