@@ -2,17 +2,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from university_pz_parser.db.session import create_all, make_engine, make_sessions
-from university_pz_parser.extractors.registry import ExtractorRegistry
-from university_pz_parser.services.ingest import IngestService
-from university_pz_parser.settings import (
+from inbox_hub.db.session import create_all, make_engine, make_sessions
+from inbox_hub.extractors.registry import ExtractorRegistry
+from inbox_hub.services.ingest import IngestService
+from inbox_hub.settings import (
     ApiSettings,
     DatabaseSettings,
     SdoSettings,
     Settings,
     TelegramSettings,
 )
-from university_pz_parser.storage.files import FileStore
+from inbox_hub.storage.files import FileStore
 
 
 @pytest.fixture

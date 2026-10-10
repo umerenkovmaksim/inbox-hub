@@ -1,8 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
-from university_pz_parser.domain.dto import IncomingItem
-from university_pz_parser.enums import Source
-from university_pz_parser.services.feed import FeedQuery, FeedService
+from inbox_hub.domain.dto import IncomingItem
+from inbox_hub.enums import Source
+from inbox_hub.services.feed import FeedQuery, FeedService
 
 D = datetime(2026, 10, 1, tzinfo=UTC)
 

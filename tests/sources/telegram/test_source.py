@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 from telethon.tl.types import Message, PeerChannel
 
-from university_pz_parser.enums import Source
-from university_pz_parser.sources.telegram.source import TelegramSource
+from inbox_hub.enums import Source
+from inbox_hub.sources.telegram.source import TelegramSource
 
 DT = datetime(2026, 10, 1, 8, tzinfo=UTC)
 
@@ -74,7 +74,7 @@ async def test_live_event_does_not_move_cursor(ingest, settings, clock):
 
 
 async def test_one_broken_chat_does_not_stop_the_others(ingest, settings, clock):
-    from university_pz_parser.settings import TelegramSettings
+    from inbox_hub.settings import TelegramSettings
 
     class Picky(FakeClient):
         async def get_entity(self, chat_id):

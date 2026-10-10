@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from university_pz_parser.container import Container
-from university_pz_parser.settings import ApiSettings, check_api_token
-from university_pz_parser.sources.telegram.client import NotAuthorizedError
+from inbox_hub.container import Container
+from inbox_hub.settings import ApiSettings, check_api_token
+from inbox_hub.sources.telegram.client import NotAuthorizedError
 
 
 def test_weak_api_tokens_rejected():
@@ -33,5 +33,5 @@ async def test_start_survives_unauthorized_telegram(settings, engine):
 
 
 def test_unit_has_private_tmp():
-    unit = Path(__file__).parents[1] / "deploy" / "study-inbox.service"
+    unit = Path(__file__).parents[1] / "deploy" / "inbox-hub.service"
     assert "PrivateTmp=true" in unit.read_text()

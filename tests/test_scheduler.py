@@ -1,5 +1,5 @@
-from university_pz_parser.container import Container
-from university_pz_parser.scheduler import build_scheduler
+from inbox_hub.container import Container
+from inbox_hub.scheduler import build_scheduler
 
 
 async def test_jobs_registered(settings, engine):

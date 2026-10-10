@@ -1,0 +1,108 @@
+import asyncio
+import json
+from pathlib import Path
+
+import typer
+
+from inbox_hub.logging import configure_logging
+from inbox_hub.settings import check_api_token, get_settings
+
+app = typer.Typer(no_args_is_help=True)
+
+
+@app.command()
+def login() -> None:
+    from inbox_hub.sources.telegram.client import TelegramClientManager
+
+    async def run():
+        tg = TelegramClientManager(get_settings().telegram)
+        await tg.client.start()
+        me = await tg.client.get_me()
+        typer.echo(f"logged in as {me.first_name} ({me.id})")
+        await tg.stop()
+
+    asyncio.run(run())
+
+
+@app.command("list-chats")
+def list_chats() -> None:
+    from inbox_hub.sources.telegram.client import TelegramClientManager
+
+    async def run():
+        tg = TelegramClientManager(get_settings().telegram)
+        await tg.start()
+        async for d in tg.client.iter_dialogs():
+            if d.is_group or d.is_channel:
+                typer.echo(f"{d.id}\t{d.name}")
+        await tg.stop()
+
+    asyncio.run(run())
+
+
+@app.command("init-db")
+def init_db() -> None:
+    from alembic.config import Config
+
+    from alembic import command
+
+    Path("data").mkdir(exist_ok=True)
+    command.upgrade(Config("alembic.ini"), "head")
+
+
+@app.command()
+def sync(source: str) -> None:
+    from inbox_hub.container import Container
+
+    async def run():
+        c = await Container.build(get_settings())
+        try:
+            if source == "telegram":
+                await c.tg.start()
+            report = await c.runner.run(c.jobs[source])
+            typer.echo(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+        finally:
+            await c.stop()
+
+    configure_logging()
+    asyncio.run(run())
+
+
+@app.command("import-export")
+def import_export(
+    file: Path, chat_id: int = typer.Option(..., help="marked id, e.g. -1002362006703")
+) -> None:
+    from inbox_hub.cli.import_export import export_to_items
+    from inbox_hub.container import Container
+
+    async def run():
+        c = await Container.build(get_settings(), with_sources=False)
+        counts: dict[str, int] = {}
+        try:
+            data = json.loads(file.read_text(encoding="utf-8"))
+            for item in export_to_items(data, chat_id, file.parent):
+                status = await c.ingest.ingest(item)
+                counts[status] = counts.get(status, 0) + 1
+        finally:
+            await c.stop()
+        typer.echo(counts)
+
+    configure_logging()
+    asyncio.run(run())
+
+
+@app.command()
+def serve() -> None:
+    import uvicorn
+
+    from inbox_hub.api.app import create_app
+
+    configure_logging()
+    s = get_settings()
+    check_api_token(s.api)
+    uvicorn.run(
+        create_app(), host=s.api.host, port=s.api.port, workers=1, log_config=None
+    )
+
+
+if __name__ == "__main__":
+    app()

@@ -1,5 +1,5 @@
 import respx
-from study_inbox_mcp import server
+from inbox_hub_mcp import server
 
 
 @respx.mock

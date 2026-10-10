@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
-from university_pz_parser.domain.dto import IncomingItem
-from university_pz_parser.domain.hashing import content_hash, text_norm_hash
-from university_pz_parser.enums import Source
+from inbox_hub.domain.dto import IncomingItem
+from inbox_hub.domain.hashing import content_hash, text_norm_hash
+from inbox_hub.enums import Source
 
 
 def make(**kw):

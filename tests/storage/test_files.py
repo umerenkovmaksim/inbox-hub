@@ -1,6 +1,6 @@
 import hashlib
 
-from university_pz_parser.storage.files import FileStore
+from inbox_hub.storage.files import FileStore
 
 
 def test_put_moves_and_dedups(tmp_path):

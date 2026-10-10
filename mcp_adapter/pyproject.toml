@@ -1,11 +1,11 @@
 [project]
-name = "study-inbox-mcp"
+name = "inbox-hub-mcp"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = ["mcp>=2", "httpx>=0.27"]
 
 [project.scripts]
-study-inbox-mcp = "study_inbox_mcp.server:main"
+inbox-hub-mcp = "inbox_hub_mcp.server:main"
 
 [dependency-groups]
 dev = ["pytest", "respx"]

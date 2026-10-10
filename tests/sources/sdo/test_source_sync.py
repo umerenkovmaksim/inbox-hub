@@ -1,8 +1,8 @@
 from zoneinfo import ZoneInfo
 
-from university_pz_parser.settings import SdoSettings
-from university_pz_parser.sources.sdo import html
-from university_pz_parser.sources.sdo.source import Course, SdoSource
+from inbox_hub.settings import SdoSettings
+from inbox_hub.sources.sdo import html
+from inbox_hub.sources.sdo.source import Course, SdoSource
 
 MSK = ZoneInfo("Europe/Moscow")
 
@@ -20,7 +20,7 @@ class FakeIngest:
         self.seen = []
 
     async def ingest(self, item):
-        from university_pz_parser.services.ingest import IngestStatus
+        from inbox_hub.services.ingest import IngestStatus
 
         self.seen.append(item.external_key)
         return IngestStatus.NEW

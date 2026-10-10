@@ -2,11 +2,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 
-from university_pz_parser.db.models import File, Item
-from university_pz_parser.domain.dto import IncomingFile, IncomingItem
-from university_pz_parser.enums import Source
-from university_pz_parser.extractors.registry import ExtractorRegistry
-from university_pz_parser.services.ingest import IngestService, IngestStatus
+from inbox_hub.db.models import File, Item
+from inbox_hub.domain.dto import IncomingFile, IncomingItem
+from inbox_hub.enums import Source
+from inbox_hub.extractors.registry import ExtractorRegistry
+from inbox_hub.services.ingest import IngestService, IngestStatus
 
 
 def fetcher(content: bytes, name: str, calls: list | None = None):

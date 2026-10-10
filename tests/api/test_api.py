@@ -3,10 +3,10 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from university_pz_parser.api.app import create_app
-from university_pz_parser.container import Container
-from university_pz_parser.domain.dto import IncomingFile, IncomingItem
-from university_pz_parser.enums import Source
+from inbox_hub.api.app import create_app
+from inbox_hub.container import Container
+from inbox_hub.domain.dto import IncomingFile, IncomingItem
+from inbox_hub.enums import Source
 
 H = {"Authorization": "Bearer secret"}
 
@@ -94,7 +94,7 @@ async def test_admin_unknown_source(container):
 
 
 async def test_empty_token_is_never_accepted(settings, engine):
-    from university_pz_parser.settings import ApiSettings
+    from inbox_hub.settings import ApiSettings
 
     settings.api = ApiSettings(token="")
     c = await Container.build(settings, with_sources=False)
