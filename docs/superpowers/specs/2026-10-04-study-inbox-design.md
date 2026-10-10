@@ -72,3 +72,15 @@ docx, pdf, pptx, xlsx, ipynb, txt/md/csv/py, zip (recursive, depth 2). Runs in `
 ## Out of scope
 
 Notes, backups, retention cleanup, Telegram notifications, OCR.
+
+## Categories & access (2026-10-10, Inbox Hub)
+
+The project is renamed to Inbox Hub and is no longer study-only.
+
+- `categories(id, slug, title, description, auto_sources)`, `channel_categories` (M:N). A channel may be in several categories. New channels of a source listed in `auto_sources` join that category on creation.
+- `api_keys(name, token_hash, created_at, revoked_at, last_used_at)` + `api_key_categories`. Only sha256 of the token is stored. The scope comes from the credential: every feed query, `GET /items/{id}`, `GET /files/{sha}` and `POST /items/receive` goes through one filter (`services/feed.py::_scoped`). Out-of-scope items/files are 404. The `categories` parameter narrows and is 403 outside the scope. `duplicate_of_id` is hidden when the original is out of scope.
+- `receipts(key_id, item_id, received_at)` replaces `items.received_at`. Edits delete all receipts of the item.
+- `API__TOKEN` is the admin principal: unrestricted, the only one allowed on `/admin` (categories, channels, tracked chats, keys, Telegram dialogs, sync). The MCP adapter has no admin tools.
+- Telegram chats are `channels.tracked` rows managed by `inbox-hub chats add/remove`. Live handlers have no `chats=` filter and check a 60 s cache instead. `TELEGRAM__SOURCE_IDS` only seeds unknown chats.
+- MCP: one package, launched per profile (`INBOX_TOKEN`, `INBOX_PROFILE`). Isolation is between keys, so an unattended scheduled task gets a narrow key and only that profile in its config.
+- Migration 0002 puts existing channels into `study` (auto source `sdo`) and moves Received marks to an inactive `study` key (`inbox-hub keys rotate study` activates it).

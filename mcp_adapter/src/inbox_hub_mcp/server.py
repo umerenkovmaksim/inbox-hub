@@ -5,7 +5,10 @@ from pathlib import Path
 import httpx
 from mcp.server import MCPServer
 
-mcp = MCPServer("study-inbox")
+# One package, many profiles: the profile is just a server-side API key whose
+# categories the server enforces. The model cannot widen it from here, and this
+# adapter has no admin tools.
+mcp = MCPServer(os.environ.get("INBOX_PROFILE", "inbox-hub"))
 _http: httpx.Client | None = None
 _seen: dict[int, str] = {}
 
@@ -34,18 +37,28 @@ def _json(resp: httpx.Response):
 
 
 @mcp.tool()
+def scope() -> dict:
+    """Какие категории доступны этому подключению: имя профиля и список категорий (slug, title, description).
+
+    Доступ задан ключом на сервере; другие категории отсюда недоступны."""
+    return _json(_client().get("/me"))
+
+
+@mcp.tool()
 def get_items(
     date_from: str,
     date_to: str,
     source: str | None = None,
+    categories: list[str] | None = None,
     include_received: bool = False,
     limit: int = 200,
 ) -> dict:
-    """Учебные материалы (сообщения Telegram-чатов и элементы курсов СДО), опубликованные или изменённые в окне [date_from, date_to).
+    """Элементы (сообщения Telegram-чатов и элементы курсов СДО) из категорий этого профиля, опубликованные или изменённые в окне [date_from, date_to).
 
     date_from/date_to — ISO 8601 с часовым поясом, например 2026-10-01T00:00:00+03:00.
-    source — "telegram" или "sdo". По умолчанию возвращаются только ещё не полученные (Received) элементы.
-    У изменённых элементов edited=true, есть previous_text, removed_files и files[].added_on_edit.
+    source — "telegram" или "sdo". categories — slug'и из scope(), только сужают выборку; без них берутся все категории профиля.
+    По умолчанию возвращаются только ещё не полученные (Received) этим профилем элементы.
+    У каждого элемента есть categories. У изменённых edited=true, есть previous_text, removed_files и files[].added_on_edit.
     Оценка преподавателя (только СДО) лежит в поле grade: value, max, graded_at, grader, grading, feedback;
     итог за курс приходит отдельным элементом kind="course_grade". Смена оценки делает элемент изменённым.
     Тексты файлов обрезаны до 4000 символов (text_truncated) — полный текст через get_item.
@@ -58,6 +71,8 @@ def get_items(
     }
     if source:
         params["source"] = source
+    if categories:
+        params["categories"] = categories
     data = _json(_client().get("/items", params=params))
     for item in data.get("items", []):
         _remember(item)
@@ -66,7 +81,7 @@ def get_items(
 
 @mcp.tool()
 def mark_received(ids: list[int]) -> dict:
-    """Пометить элементы как полученные, чтобы get_items их больше не возвращал (пока они снова не изменятся)."""
+    """Пометить элементы как полученные этим профилем, чтобы get_items их больше не возвращал (пока они снова не изменятся). Другие профили отметку не видят."""
     body: dict = {"ids": ids}
     versions = {str(i): _seen[i] for i in ids if i in _seen}
     if versions:
@@ -95,7 +110,7 @@ def get_file(sha256: str) -> str:
         -1
     ]
     target_dir = Path(
-        os.environ.get("INBOX_DOWNLOAD_DIR", Path.home() / "Downloads" / "study-inbox")
+        os.environ.get("INBOX_DOWNLOAD_DIR", Path.home() / "Downloads" / "inbox-hub")
     ).expanduser()
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{sha256}_{name}"

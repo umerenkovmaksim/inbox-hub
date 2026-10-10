@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import respx
 from inbox_hub_mcp import server
 
@@ -40,3 +42,24 @@ def test_mark_received_sends_seen_versions():
 
     body = json.loads(route.calls[0].request.content)
     assert body == {"ids": [4, 9], "versions": {"4": "2026-10-01T10:00:00Z"}}
+
+
+@respx.mock
+def test_scope_and_category_narrowing():
+    server.configure("https://inbox.test", "tok")
+    respx.get("https://inbox.test/me").respond(
+        json={"name": "study-digest", "admin": False, "categories": [{"slug": "study"}]}
+    )
+    items = respx.get("https://inbox.test/items").respond(
+        json={"items": [], "count": 0}
+    )
+    assert server.scope()["name"] == "study-digest"
+    server.get_items(
+        "2026-10-01T00:00:00+03:00", "2026-10-02T00:00:00+03:00", categories=["study"]
+    )
+    assert items.calls[0].request.url.params.get_list("categories") == ["study"]
+
+
+def test_adapter_never_calls_admin_endpoints():
+    source = (Path(server.__file__)).read_text()
+    assert "/admin" not in source
