@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from inbox_hub.db.session import make_engine, make_sessions
 from inbox_hub.extractors.registry import ExtractorRegistry
 from inbox_hub.resolvers.yandex_disk import YandexDiskResolver
+from inbox_hub.services.access import AccessService
+from inbox_hub.services.catalog import CatalogService
 from inbox_hub.services.feed import FeedService
 from inbox_hub.services.health import HealthService
 from inbox_hub.services.ingest import IngestService
@@ -32,6 +34,8 @@ class Container:
     store: FileStore
     ingest: IngestService
     feed: FeedService
+    access: AccessService
+    catalog: CatalogService
     health: HealthService
     runner: JobRunner
     jobs: dict[str, Job] = field(default_factory=dict)
@@ -49,6 +53,7 @@ class Container:
             sessions, store, ExtractorRegistry(), resolvers, settings.max_file_bytes
         )
         health = HealthService(sessions)
+        catalog = CatalogService(sessions)
         c = cls(
             settings=settings,
             engine=engine,
@@ -57,13 +62,17 @@ class Container:
             store=store,
             ingest=ingest,
             feed=FeedService(sessions),
+            access=AccessService(sessions, settings.api.token.get_secret_value()),
+            catalog=catalog,
             health=health,
             runner=JobRunner(health),
         )
         if with_sources:
             tg = TelegramClientManager(settings.telegram)
             c.tg = tg
-            c.jobs["telegram"] = TelegramSource(tg.client, ingest, settings.telegram)
+            c.jobs["telegram"] = TelegramSource(
+                tg.client, ingest, catalog, settings.telegram
+            )
             sdo_http = httpx.AsyncClient(timeout=120, follow_redirects=True)
             c.extra_clients.append(sdo_http)
             c.jobs["sdo"] = SdoSource(
@@ -84,6 +93,11 @@ class Container:
                 log.exception("telegram unavailable, running without it")
                 self.jobs.pop("telegram", None)
                 await self.health.record(SyncReport("telegram", error=repr(exc)))
+
+    async def refresh_tracked_chats(self) -> None:
+        job = self.jobs.get("telegram")
+        if job is not None:
+            await job.refresh_tracked()
 
     async def stop(self) -> None:
         if self.tg is not None:

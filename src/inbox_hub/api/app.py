@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
-from inbox_hub.api.deps import require_token
+from inbox_hub.api.deps import get_principal
 from inbox_hub.api.routers import admin, files, health, items
 from inbox_hub.container import Container
 
@@ -23,5 +23,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     if container is not None:
         app.state.container = container
     for module in (items, files, health, admin):
-        app.include_router(module.router, dependencies=[Depends(require_token)])
+        # Safety net: no route is reachable without a valid key. Routes also take
+        # the Principal themselves to scope their queries (resolved once per request).
+        app.include_router(module.router, dependencies=[Depends(get_principal)])
     return app

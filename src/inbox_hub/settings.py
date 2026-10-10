@@ -10,7 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class TelegramSettings(BaseModel):
     api_id: int
     api_hash: SecretStr
-    source_ids: list[int]
+    # Legacy bootstrap: chats listed here are tracked on first sync if the DB
+    # does not know them yet. Manage chats with `inbox-hub chats ...` instead.
+    source_ids: list[int] = []
     session_path: Path = Path("data/telegram")
     backfill_from: datetime = datetime(2026, 9, 1, tzinfo=UTC)
     edit_recheck_days: int = 3

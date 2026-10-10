@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -7,12 +8,15 @@ from telethon.errors import FloodWaitError
 from telethon.utils import get_display_name
 
 from inbox_hub.enums import Source
+from inbox_hub.services.catalog import CatalogService
 from inbox_hub.services.ingest import IngestService, utcnow
 from inbox_hub.services.jobs import SyncReport
 from inbox_hub.settings import TelegramSettings
 from inbox_hub.sources.telegram.mapping import to_incoming
 
 log = logging.getLogger(__name__)
+
+TRACKED_TTL_SECONDS = 60
 
 
 class TelegramSource:
@@ -22,17 +26,36 @@ class TelegramSource:
         self,
         client,
         ingest: IngestService,
+        catalog: CatalogService,
         settings: TelegramSettings,
         clock: Callable[[], datetime] = utcnow,
     ):
         self.client = client
         self.ingest = ingest
+        self.catalog = catalog
         self.settings = settings
         self.clock = clock
+        self._tracked: set[int] = set()
+        self._tracked_at: float | None = None
+
+    async def refresh_tracked(self) -> list[int]:
+        chat_ids = await self.catalog.tracked_chat_ids()
+        self._tracked = set(chat_ids)
+        self._tracked_at = time.monotonic()
+        return chat_ids
+
+    async def _is_tracked(self, chat_id: int) -> bool:
+        if (
+            self._tracked_at is None
+            or time.monotonic() - self._tracked_at > TRACKED_TTL_SECONDS
+        ):
+            await self.refresh_tracked()
+        return chat_id in self._tracked
 
     async def sync(self) -> SyncReport:
         report = SyncReport(self.name)
-        for chat_id in self.settings.source_ids:
+        await self.catalog.seed_tracked_chats(self.settings.source_ids)
+        for chat_id in await self.refresh_tracked():
             try:
                 entity = await self.client.get_entity(chat_id)
                 title = get_display_name(entity) or getattr(
@@ -76,14 +99,15 @@ class TelegramSource:
             report.count(await self.ingest.ingest(item))
 
     def register_handlers(self) -> None:
-        chats = list(self.settings.source_ids)
-        self.client.add_event_handler(self.handle_event, events.NewMessage(chats=chats))
-        self.client.add_event_handler(
-            self.handle_event, events.MessageEdited(chats=chats)
-        )
+        # No `chats=` filter: tracked chats live in the DB and change at runtime,
+        # so handle_event checks them itself.
+        self.client.add_event_handler(self.handle_event, events.NewMessage())
+        self.client.add_event_handler(self.handle_event, events.MessageEdited())
 
     async def handle_event(self, event) -> None:
         try:
+            if not await self._is_tracked(event.chat_id):
+                return
             chat = await event.get_chat()
             title = get_display_name(chat) or str(event.chat_id)
             item = to_incoming(event.chat_id, title, event.message)

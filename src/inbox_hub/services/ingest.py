@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from inbox_hub.db.models import Channel, File, Item, ItemFile
+from inbox_hub.db.models import Category, Channel, File, Item, ItemFile, Receipt
 from inbox_hub.domain.dto import IncomingFile, IncomingItem
 from inbox_hub.domain.hashing import content_hash, text_norm_hash
 from inbox_hub.enums import Source
@@ -221,7 +221,7 @@ class IngestService:
                     row.previous_text = row.text
                 row.edited = True
                 row.edited_at = now
-                row.received_at = None
+                await s.execute(delete(Receipt).where(Receipt.item_id == row.id))
                 status = IngestStatus.CHANGED
             row.channel_id = channel.id
             row.kind = item.kind
@@ -297,6 +297,11 @@ class IngestService:
                 external_id=item.channel_external_id,
                 title=item.channel_title,
                 cursor=0,
+                categories=[
+                    c
+                    for c in (await s.scalars(select(Category))).all()
+                    if item.source in (c.auto_sources or [])
+                ],
             )
             s.add(channel)
             await s.flush()

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 
-from inbox_hub.db.models import File, Item
+from inbox_hub.db.models import File, Item, Receipt
 from inbox_hub.domain.dto import IncomingFile, IncomingItem
 from inbox_hub.enums import Source
 from inbox_hub.extractors.registry import ExtractorRegistry
@@ -85,14 +85,18 @@ async def test_same_file_in_two_sources_is_one_file(ingest, sessions):
     ).links[0].file_sha256
 
 
-async def test_edit_after_receive_resets_received(ingest, sessions, clock):
+async def test_edit_after_receive_resets_received(ingest, catalog, sessions, clock):
     await ingest.ingest(tg(text="Пара в 311 аудитории"))
+    key_a, _ = await catalog.create_key("a", [])
+    key_b, _ = await catalog.create_key("b", [])
     async with sessions.begin() as s:
-        (await s.execute(select(Item))).scalar_one().received_at = clock()
+        item_id = (await s.execute(select(Item))).scalar_one().id
+        for key in (key_a, key_b):
+            s.add(Receipt(key_id=key.id, item_id=item_id, received_at=clock()))
     clock.tick(30)
     assert await ingest.ingest(tg(text="Пара в 317 аудитории")) is IngestStatus.CHANGED
     item = await one(sessions, "-1001:1")
-    assert item.edited and item.received_at is None
+    assert item.edited and await count(sessions, Receipt) == 0
     assert item.previous_text == "Пара в 311 аудитории"
     assert item.edited_at == clock()
     assert item.published_at == datetime(2026, 10, 1, 8, 1, tzinfo=UTC)

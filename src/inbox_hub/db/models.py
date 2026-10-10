@@ -1,12 +1,74 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Column,
+    ForeignKey,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    false,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from inbox_hub.db.base import Base
 from inbox_hub.db.types import UTCDateTime
 from inbox_hub.enums import Source
+
+channel_categories = Table(
+    "channel_categories",
+    Base.metadata,
+    Column(
+        "channel_id",
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
+
+api_key_categories = Table(
+    "api_key_categories",
+    Base.metadata,
+    Column("key_id", ForeignKey("api_keys.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "category_id",
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    auto_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+    categories: Mapped[list[Category]] = relationship(
+        secondary=api_key_categories, lazy="selectin", order_by=Category.slug
+    )
 
 
 class Channel(Base):
@@ -19,6 +81,11 @@ class Channel(Base):
     title: Mapped[str] = mapped_column(String(512))
     description: Mapped[str | None] = mapped_column(Text)
     cursor: Mapped[int] = mapped_column(BigInteger, default=0)
+    tracked: Mapped[bool] = mapped_column(default=False, server_default=false())
+
+    categories: Mapped[list[Category]] = relationship(
+        secondary=channel_categories, lazy="selectin", order_by=Category.slug
+    )
 
 
 class File(Base):
@@ -74,13 +141,24 @@ class Item(Base):
     edited: Mapped[bool] = mapped_column(default=False)
     previous_text: Mapped[str | None] = mapped_column(Text)
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
-    received_at: Mapped[datetime | None] = mapped_column(UTCDateTime, index=True)
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     channel: Mapped[Channel] = relationship(lazy="joined")
     links: Mapped[list[ItemFile]] = relationship(
         back_populates="item", lazy="selectin", cascade="all, delete-orphan"
     )
+
+
+class Receipt(Base):
+    __tablename__ = "receipts"
+
+    key_id: Mapped[int] = mapped_column(
+        ForeignKey("api_keys.id", ondelete="CASCADE"), primary_key=True
+    )
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("items.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    received_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
 class SourceHealth(Base):

@@ -4,6 +4,7 @@ import pytest
 
 from inbox_hub.db.session import create_all, make_engine, make_sessions
 from inbox_hub.extractors.registry import ExtractorRegistry
+from inbox_hub.services.catalog import CatalogService
 from inbox_hub.services.ingest import IngestService
 from inbox_hub.settings import (
     ApiSettings,
@@ -72,3 +73,8 @@ def ingest(sessions, store, clock, settings):
         max_file_bytes=settings.max_file_bytes,
         clock=clock,
     )
+
+
+@pytest.fixture
+def catalog(sessions, clock):
+    return CatalogService(sessions, clock=clock)

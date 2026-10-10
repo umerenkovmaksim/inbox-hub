@@ -3,7 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from inbox_hub.db.models import Item, SourceHealth
+from inbox_hub.db.models import ApiKey, Category, Channel, Item, SourceHealth
+from inbox_hub.services.feed import FeedEntry
 
 
 class FileOut(BaseModel):
@@ -38,6 +39,7 @@ class ItemOut(BaseModel):
     id: int
     source: str
     channel: str
+    categories: list[str]
     kind: str
     title: str | None
     text: str
@@ -75,10 +77,64 @@ class ReceiveOut(BaseModel):
 
 class HealthOut(BaseModel):
     source: str
+    ok: bool
     last_run_at: datetime | None
     last_ok_at: datetime | None
-    last_error: str | None
-    last_report: dict[str, Any]
+    last_error: str | None = None
+    last_report: dict[str, Any] | None = None
+
+
+class CategoryOut(BaseModel):
+    slug: str
+    title: str
+    description: str | None
+    auto_sources: list[str] = []
+
+
+class MeOut(BaseModel):
+    name: str
+    admin: bool
+    categories: list[CategoryOut]
+
+
+class CategoryIn(BaseModel):
+    slug: str
+    title: str
+    description: str | None = None
+    auto_sources: list[str] = []
+
+
+class ChannelOut(BaseModel):
+    id: int
+    source: str
+    external_id: str
+    title: str
+    tracked: bool
+    categories: list[str]
+
+
+class TrackChatIn(BaseModel):
+    chat_id: int
+    categories: list[str] = []
+
+
+class KeyOut(BaseModel):
+    name: str
+    active: bool
+    created_at: datetime
+    revoked_at: datetime | None
+    last_used_at: datetime | None
+    categories: list[str]
+
+
+class KeyIn(BaseModel):
+    name: str
+    categories: list[str] = []
+
+
+class KeyTokenOut(BaseModel):
+    name: str
+    token: str
 
 
 def _file_out(link, item: Item, limit: int | None) -> FileOut:
@@ -99,7 +155,8 @@ def _file_out(link, item: Item, limit: int | None) -> FileOut:
     )
 
 
-def item_out(item: Item, text_limit: int | None) -> ItemOut:
+def item_out(entry: FeedEntry, text_limit: int | None) -> ItemOut:
+    item = entry.item
     extra = dict(item.extra or {})
     skipped = extra.pop("skipped_files", [])
     grade = extra.pop("grade", None)
@@ -107,6 +164,7 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         id=item.id,
         source=item.source,
         channel=item.channel.title,
+        categories=entry.categories,
         kind=item.kind,
         title=item.title,
         text=item.text,
@@ -119,8 +177,8 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         previous_text=item.previous_text,
         due_at=item.due_at,
         available_from=item.available_from,
-        duplicate_of_id=item.duplicate_of_id,
-        received_at=item.received_at,
+        duplicate_of_id=entry.duplicate_of_id,
+        received_at=entry.received_at,
         files=[
             _file_out(k, item, text_limit) for k in item.links if k.detached_at is None
         ],
@@ -133,11 +191,45 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
     )
 
 
-def health_out(row: SourceHealth) -> HealthOut:
-    return HealthOut(
+def health_out(row: SourceHealth, detailed: bool) -> HealthOut:
+    out = HealthOut(
         source=row.source,
+        ok=row.last_error is None,
         last_run_at=row.last_run_at,
         last_ok_at=row.last_ok_at,
-        last_error=row.last_error,
-        last_report=row.last_report or {},
+    )
+    if detailed:
+        out.last_error = row.last_error
+        out.last_report = row.last_report or {}
+    return out
+
+
+def category_out(c: Category) -> CategoryOut:
+    return CategoryOut(
+        slug=c.slug,
+        title=c.title,
+        description=c.description,
+        auto_sources=c.auto_sources or [],
+    )
+
+
+def channel_out(c: Channel) -> ChannelOut:
+    return ChannelOut(
+        id=c.id,
+        source=c.source,
+        external_id=c.external_id,
+        title=c.title,
+        tracked=c.tracked,
+        categories=[x.slug for x in c.categories],
+    )
+
+
+def key_out(k: ApiKey) -> KeyOut:
+    return KeyOut(
+        name=k.name,
+        active=k.token_hash is not None and k.revoked_at is None,
+        created_at=k.created_at,
+        revoked_at=k.revoked_at,
+        last_used_at=k.last_used_at,
+        categories=[x.slug for x in k.categories],
     )
