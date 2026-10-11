@@ -3,9 +3,9 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from university_pz_parser.db import models  # noqa: F401
-from university_pz_parser.db.base import Base
-from university_pz_parser.settings import get_settings
+from inbox_hub.db import models  # noqa: F401
+from inbox_hub.db.base import Base
+from inbox_hub.settings import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -25,4 +25,4 @@ RUN uv sync --frozen --no-dev
 VOLUME /app/data
 EXPOSE 8000
 
-CMD ["sh", "-c", "university-pz-parser init-db && exec university-pz-parser serve"]
+CMD ["sh", "-c", "inbox-hub init-db && exec inbox-hub serve"]

@@ -1,5 +1,5 @@
-from university_pz_parser.services.health import HealthService
-from university_pz_parser.services.jobs import JobRunner, SyncReport
+from inbox_hub.services.health import HealthService
+from inbox_hub.services.jobs import JobRunner, SyncReport
 
 
 class Boom:

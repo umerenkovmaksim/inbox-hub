@@ -13,7 +13,7 @@ from telethon.tl.types import (
     PeerUser,
 )
 
-from university_pz_parser.sources.telegram.mapping import message_link, to_incoming
+from inbox_hub.sources.telegram.mapping import message_link, to_incoming
 
 DT = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
 CHAT = -1002362006703
@@ -124,3 +124,72 @@ def test_link_preview_photo_is_not_a_photo_message():
     )
     item = to_incoming(CHAT, "x", m)
     assert item.kind == "text" and item.files == ()
+
+
+def _photo_message():
+    from telethon.tl.types import MessageMediaPhoto, Photo, PhotoSize
+
+    photo = Photo(
+        id=55,
+        access_hash=1,
+        file_reference=b"\x01\x02",
+        date=DT,
+        sizes=[PhotoSize(type="x", w=800, h=600, size=50_000)],
+        dc_id=2,
+    )
+    return Message(
+        id=13,
+        peer_id=PeerChannel(2362006703),
+        date=DT,
+        message="расписание",
+        media=MessageMediaPhoto(photo=photo),
+    )
+
+
+def test_photo_is_downloaded_by_default():
+    item = to_incoming(CHAT, "x", _photo_message())
+    assert item.kind == "photo"
+    assert item.files[0].remote_id == "tg:photo:55"
+
+
+def test_kinds_outside_download_kinds_keep_metadata_only():
+    item = to_incoming(CHAT, "x", _photo_message(), download_kinds={"document"})
+    assert item.kind == "photo" and item.files == ()
+    assert "media" in item.extra
+
+
+def test_raw_is_json_serializable_message_dict():
+    import json
+
+    item = to_incoming(CHAT, "x", _photo_message())
+    assert item.raw["_"] == "Message" and item.raw["id"] == 13
+    assert item.raw["date"] == DT.isoformat()
+    json.dumps(item.raw)  # bytes (file_reference) were encoded by Telethon
+
+
+async def test_fetcher_waits_out_flood_and_retries(monkeypatch, tmp_path):
+    from telethon.errors import FloodWaitError
+
+    from inbox_hub.sources.telegram import mapping
+
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr(mapping.asyncio, "sleep", fake_sleep)
+    calls = []
+
+    class M:
+        id = 1
+
+        async def download_media(self, file):
+            calls.append(file)
+            if len(calls) == 1:
+                raise FloodWaitError(request=None, capture=420)
+            target = file / "x.pdf"
+            target.write_bytes(b"x")
+            return str(target)
+
+    path = await mapping._fetcher(M())(tmp_path)
+    assert slept == [420] and len(calls) == 2 and path.exists()

@@ -1,0 +1,18 @@
+[Unit]
+Description=Inbox Hub
+After=network-online.target
+
+[Service]
+User=inboxhub
+WorkingDirectory=/opt/inbox-hub
+EnvironmentFile=/opt/inbox-hub/.env
+ExecStart=/opt/inbox-hub/.venv/bin/inbox-hub serve
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/opt/inbox-hub/data
+
+[Install]
+WantedBy=multi-user.target
