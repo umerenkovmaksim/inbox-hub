@@ -7,9 +7,8 @@
 ```bash
 uv sync
 cp .env.example .env
-uv run inbox-hub login
-uv run inbox-hub list-chats
 uv run inbox-hub init-db
+uv run inbox-hub login        # один раз; сессия сохраняется в data/telegram.session
 ```
 
 В `.env` указываются `TELEGRAM__*`, `SDO__*` и `API__TOKEN` (admin). `SDO__BACKEND=auto` включает мобильный REST СДО, если он выдаёт токен. По умолчанию используется разбор HTML.
@@ -21,6 +20,7 @@ uv run inbox-hub init-db
 ```bash
 inbox-hub categories create study --title "Учёба" --auto-source sdo   # новые курсы СДО попадают сюда сами
 inbox-hub categories create work --title "Работа"
+inbox-hub list-chats                                                   # группы и каналы аккаунта
 inbox-hub chats add -1001234567890 --category work                     # id из list-chats; начинает собираться
 inbox-hub categories add-channel study telegram:-1009876543210         # канал может быть в нескольких категориях
 inbox-hub channels list
@@ -28,9 +28,9 @@ inbox-hub keys create study-digest --category study                    # печ�
 inbox-hub keys grant study-digest news | ungrant | rotate | revoke
 ```
 
-Команды работают с базой напрямую, поэтому их можно запускать рядом с работающим сервером. В Docker: `docker compose exec inbox-hub inbox-hub ...`. Новый чат подхватывается в течение минуты, а история за `TELEGRAM__BACKFILL_FROM` подтягивается на ближайшей синхронизации (или сразу через `POST /admin/sync/telegram`).
+Команды работают с базой напрямую, поэтому их можно запускать рядом с работающими процессами. В Docker: `docker compose exec inbox-hub inbox-hub ...`. Новый чат коллектор подхватывает в течение минуты и сразу дочитывает историю с `TELEGRAM__BACKFILL_FROM`.
 
-Пока сервер работает, `list-chats` из CLI не запустится, потому что сессия Telegram занята. Список диалогов в этом случае отдаёт `GET /admin/telegram/dialogs`.
+`list-chats` и `GET /admin/telegram/dialogs` показывают снимок групп и каналов с последней сверки коллектора (в Telegram не ходят). Пока коллектор ни разу не запускался, список пуст.
 
 Канал без категорий собирается, но виден только admin-токену.
 
@@ -40,13 +40,24 @@ inbox-hub keys grant study-digest news | ungrant | rotate | revoke
 
 ## Запуск
 
+Два процесса на одной базе:
+
 ```bash
-uv run inbox-hub serve
+uv run inbox-hub collect   # единственный процесс, который ходит в Telegram
+uv run inbox-hub serve     # HTTP API + СДО по расписанию; Telegram не трогает (один воркер)
 ```
 
-Нужен ровно один воркер: планировщик и клиент Telegram живут в этом же процессе.
+`collect` держит lock-файл `data/telegram.lock`: второй процесс с той же сессией (ещё один `collect` или `login`) не запустится. Новые сообщения, правки и удаления приходят событиями (`catch_up=True` догоняет пропущенное за время простоя). При старте и раз в `TELEGRAM__RECONCILE_INTERVAL_HOURS` (по умолчанию 4) сверка через `iter_dialogs` дочитывает историю только тех отслеживаемых чатов, где Telegram видит сообщения новее сохранённых. Удалённые сообщения не стираются: они получают `deleted_at` и пропадают из `/items`. Исходный `message.to_dict()` хранится в `items.raw`. Скачиваются документы и фото (`TELEGRAM__DOWNLOAD_KINDS`), по одному.
 
-Разовые команды: `sync telegram|sdo` и `import-export FILE --chat-id ID` (импорт JSON-экспорта Telegram Desktop).
+Параметры клиента (`TELEGRAM__DEVICE_MODEL`, `TELEGRAM__SYSTEM_VERSION`, `TELEGRAM__APP_VERSION`) задайте один раз и не меняйте.
+
+Разовые команды: `sync sdo` и `import-export FILE --chat-id ID` (импорт JSON-экспорта Telegram Desktop).
+
+### Переход на отдельный коллектор
+
+1. Остановить старый `serve`: раньше он сам подключался к Telegram, и два подключения с одной сессией недопустимы.
+2. `inbox-hub init-db` — миграция `0003`: колонки `raw` и `deleted_at`, таблица снимка диалогов, курсоры чатов поднимаются до последнего сохранённого `msg_id`. Данные не трогаются.
+3. Запустить `collect` и `serve`. Файл сессии используется как есть, повторный `login` не нужен.
 
 ## Доступ
 
@@ -63,7 +74,7 @@ uv run inbox-hub serve
 | `GET /files/{sha256}` | исходный файл |
 | `GET /me` | имя ключа и его категории |
 | `GET /health` | состояние источников (подробности только admin) |
-| `POST /admin/sync/{source}` | ручная синхронизация |
+| `POST /admin/sync/sdo` | ручная синхронизация СДО (Telegram из API не запускается) |
 | `/admin/categories`, `/admin/channels`, `/admin/telegram/chats`, `/admin/telegram/dialogs`, `/admin/keys` | управление (только admin) |
 
 ## MCP
@@ -72,6 +83,6 @@ uv run inbox-hub serve
 
 ## Деплой
 
-Скопировать [deploy/inbox-hub.service](deploy/inbox-hub.service) в `/etc/systemd/system/`, [deploy/Caddyfile](deploy/Caddyfile) — в конфигурацию Caddy, затем выполнить `systemctl enable --now inbox-hub`.
+Скопировать [deploy/inbox-hub.service](deploy/inbox-hub.service) и [deploy/inbox-hub-collector.service](deploy/inbox-hub-collector.service) в `/etc/systemd/system/`, [deploy/Caddyfile](deploy/Caddyfile) — в конфигурацию Caddy, затем выполнить `systemctl enable --now inbox-hub inbox-hub-collector`.
 
-В Docker: `docker compose up -d --build`. Том данных закреплён под старым именем `university-pz-parser_inbox-data`, поэтому данные сохраняются после переименования.
+В Docker: `docker compose up -d --build`. Сервис `inbox-hub` сначала применяет миграции, затем запускает `serve`; `collector` стартует, только когда `inbox-hub` стал healthy. Том данных закреплён под старым именем `university-pz-parser_inbox-data`, поэтому данные сохраняются после переименования.

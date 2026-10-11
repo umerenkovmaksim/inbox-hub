@@ -9,7 +9,6 @@ from inbox_hub.settings import get_settings
 @asynccontextmanager
 async def run_server_lifespan(app):
     c = await Container.build(get_settings())
-    await c.start()
     app.state.container = c
     scheduler = build_scheduler(c)
     scheduler.start()

@@ -9,6 +9,7 @@ from inbox_hub.db.models import (
     ApiKey,
     Category,
     Channel,
+    TelegramDialog,
     api_key_categories,
     channel_categories,
 )
@@ -155,6 +156,17 @@ class CatalogService:
                 .order_by(Channel.id)
             )
             return [int(x) for x in rows.all()]
+
+    async def telegram_dialogs(self) -> list[TelegramDialog]:
+        """Dialog snapshot written by the collector's reconciler."""
+        async with self.sessions() as s:
+            return list(
+                (
+                    await s.scalars(
+                        select(TelegramDialog).order_by(TelegramDialog.title)
+                    )
+                ).all()
+            )
 
     async def seed_tracked_chats(self, chat_ids: Iterable[int]) -> None:
         """Track chats from the legacy TELEGRAM__SOURCE_IDS that the DB does not know yet."""

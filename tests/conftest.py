@@ -19,7 +19,12 @@ from inbox_hub.storage.files import FileStore
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     return Settings(
-        telegram=TelegramSettings(api_id=1, api_hash="h", source_ids=[-1001]),
+        telegram=TelegramSettings(
+            api_id=1,
+            api_hash="h",
+            source_ids=[-1001],
+            session_path=tmp_path / "telegram",
+        ),
         sdo=SdoSettings(url="https://sdo.test", username="u", password="p"),
         api=ApiSettings(token="secret"),
         database=DatabaseSettings(url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"),

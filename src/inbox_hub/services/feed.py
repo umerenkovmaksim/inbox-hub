@@ -75,7 +75,10 @@ class FeedService:
         )
         async with self.sessions() as s:
             scope = await self._narrow(s, p, q.categories)
-            stmt = _scoped(self._with_receipt(p).where(in_window), scope)
+            stmt = _scoped(
+                self._with_receipt(p).where(in_window, Item.deleted_at.is_(None)),
+                scope,
+            )
             if q.source is not None:
                 stmt = stmt.where(Item.source == q.source)
             if not q.include_received:
