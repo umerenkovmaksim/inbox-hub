@@ -1,20 +1,51 @@
+x-env: &env
+  TELEGRAM__API_ID: ${TELEGRAM__API_ID:?}
+  TELEGRAM__API_HASH: ${TELEGRAM__API_HASH:?}
+  TELEGRAM__SOURCE_IDS: ${TELEGRAM__SOURCE_IDS:?}
+  TELEGRAM__BACKFILL_FROM: ${TELEGRAM__BACKFILL_FROM:-2026-09-01T00:00:00+03:00}
+  TELEGRAM__DEVICE_MODEL: ${TELEGRAM__DEVICE_MODEL:-Study Inbox}
+  TELEGRAM__SYSTEM_VERSION: ${TELEGRAM__SYSTEM_VERSION:-Linux}
+  TELEGRAM__APP_VERSION: ${TELEGRAM__APP_VERSION:-1.0}
+  TELEGRAM__RECONCILE_INTERVAL_HOURS: ${TELEGRAM__RECONCILE_INTERVAL_HOURS:-4}
+  TELEGRAM__DOWNLOAD_KINDS: ${TELEGRAM__DOWNLOAD_KINDS:-["document","photo"]}
+  SDO__URL: ${SDO__URL:-https://sdo.timacad.ru}
+  SDO__USERNAME: ${SDO__USERNAME:?}
+  SDO__PASSWORD: ${SDO__PASSWORD:?}
+  SDO__EXCLUDE_COURSE_IDS: ${SDO__EXCLUDE_COURSE_IDS:-[]}
+  SDO__BACKEND: ${SDO__BACKEND:-html}
+  API__TOKEN: ${API__TOKEN:?}
+
 services:
-  study-inbox:
+  migrate:
     build: .
-    restart: unless-stopped
-    environment:
-      TELEGRAM__API_ID: ${TELEGRAM__API_ID:?}
-      TELEGRAM__API_HASH: ${TELEGRAM__API_HASH:?}
-      TELEGRAM__SOURCE_IDS: ${TELEGRAM__SOURCE_IDS:?}
-      TELEGRAM__BACKFILL_FROM: ${TELEGRAM__BACKFILL_FROM:-2026-09-01T00:00:00+03:00}
-      SDO__URL: ${SDO__URL:-https://sdo.timacad.ru}
-      SDO__USERNAME: ${SDO__USERNAME:?}
-      SDO__PASSWORD: ${SDO__PASSWORD:?}
-      SDO__EXCLUDE_COURSE_IDS: ${SDO__EXCLUDE_COURSE_IDS:-[]}
-      SDO__BACKEND: ${SDO__BACKEND:-html}
-      API__TOKEN: ${API__TOKEN:?}
+    command: ["university-pz-parser", "init-db"]
+    environment: *env
     volumes:
       - inbox-data:/app/data
+
+  # The only process that talks to Telegram. Exactly one instance.
+  collector:
+    build: .
+    command: ["university-pz-parser", "collect"]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment: *env
+    volumes:
+      - inbox-data:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  study-inbox:
+    build: .
+    command: ["university-pz-parser", "serve"]
+    restart: unless-stopped
+    environment: *env
+    volumes:
+      - inbox-data:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   inbox-data:

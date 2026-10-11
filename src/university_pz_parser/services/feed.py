@@ -37,7 +37,7 @@ class FeedService:
                 Item.edited_at < q.date_to,
             ),
         )
-        stmt = select(Item).where(in_window)
+        stmt = select(Item).where(in_window, Item.deleted_at.is_(None))
         if q.source is not None:
             stmt = stmt.where(Item.source == q.source)
         if not q.include_received:

@@ -1,0 +1,51 @@
+"""telegram raw payload, soft delete, cursor as max msg_id
+
+Revision ID: 0002
+Revises: 0001
+Create Date: 2026-10-11 12:00:00
+
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+
+import university_pz_parser.db.types
+from alembic import op
+
+revision: str = "0002"
+down_revision: str | Sequence[str] | None = "0001"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    with op.batch_alter_table("items", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("raw", sa.JSON(), nullable=True))
+        batch_op.add_column(
+            sa.Column(
+                "deleted_at",
+                university_pz_parser.db.types.UTCDateTime(),
+                nullable=True,
+            )
+        )
+    # channels.cursor becomes the highest msg_id stored per chat, so the
+    # reconciler does not re-read history that is already in the database.
+    op.execute(
+        """
+        UPDATE channels SET cursor = (
+            SELECT MAX(channels.cursor, COALESCE(MAX(CAST(
+                substr(items.external_key, instr(items.external_key, ':') + 1)
+                AS INTEGER)), 0))
+            FROM items
+            WHERE items.channel_id = channels.id AND items.source = 'telegram'
+        )
+        WHERE source = 'telegram'
+        """
+    )
+
+
+def downgrade() -> None:
+    with op.batch_alter_table("items", schema=None) as batch_op:
+        batch_op.drop_column("deleted_at")
+        batch_op.drop_column("raw")

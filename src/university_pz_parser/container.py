@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -11,16 +10,12 @@ from university_pz_parser.resolvers.yandex_disk import YandexDiskResolver
 from university_pz_parser.services.feed import FeedService
 from university_pz_parser.services.health import HealthService
 from university_pz_parser.services.ingest import IngestService
-from university_pz_parser.services.jobs import Job, JobRunner, SyncReport
+from university_pz_parser.services.jobs import Job, JobRunner
 from university_pz_parser.settings import Settings
 from university_pz_parser.sources.sdo.client import SdoHttp
 from university_pz_parser.sources.sdo.rest import SdoRest
 from university_pz_parser.sources.sdo.source import SdoSource
-from university_pz_parser.sources.telegram.client import TelegramClientManager
-from university_pz_parser.sources.telegram.source import TelegramSource
 from university_pz_parser.storage.files import FileStore
-
-log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,7 +30,6 @@ class Container:
     health: HealthService
     runner: JobRunner
     jobs: dict[str, Job] = field(default_factory=dict)
-    tg: TelegramClientManager | None = None
     extra_clients: list[httpx.AsyncClient] = field(default_factory=list)
 
     @classmethod
@@ -61,9 +55,6 @@ class Container:
             runner=JobRunner(health),
         )
         if with_sources:
-            tg = TelegramClientManager(settings.telegram)
-            c.tg = tg
-            c.jobs["telegram"] = TelegramSource(tg.client, ingest, settings.telegram)
             sdo_http = httpx.AsyncClient(timeout=120, follow_redirects=True)
             c.extra_clients.append(sdo_http)
             c.jobs["sdo"] = SdoSource(
@@ -75,19 +66,7 @@ class Container:
             )
         return c
 
-    async def start(self) -> None:
-        if self.tg is not None:
-            try:
-                await self.tg.start()
-                self.jobs["telegram"].register_handlers()
-            except Exception as exc:
-                log.exception("telegram unavailable, running without it")
-                self.jobs.pop("telegram", None)
-                await self.health.record(SyncReport("telegram", error=repr(exc)))
-
     async def stop(self) -> None:
-        if self.tg is not None:
-            await self.tg.stop()
         for client in self.extra_clients:
             await client.aclose()
         await self.http.aclose()

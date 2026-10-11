@@ -76,6 +76,8 @@ class Item(Base):
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
     received_at: Mapped[datetime | None] = mapped_column(UTCDateTime, index=True)
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    raw: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     channel: Mapped[Channel] = relationship(lazy="joined")
     links: Mapped[list[ItemFile]] = relationship(

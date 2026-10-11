@@ -7,14 +7,6 @@ from university_pz_parser.container import Container
 def build_scheduler(c: Container) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=c.settings.tz)
     common = {"max_instances": 1, "coalesce": True, "misfire_grace_time": 600}
-    if "telegram" in c.jobs:
-        scheduler.add_job(
-            c.runner.run,
-            CronTrigger(minute=5),
-            args=[c.jobs["telegram"]],
-            id="telegram_hourly",
-            **common,
-        )
     if "sdo" in c.jobs:
         scheduler.add_job(
             c.runner.run,

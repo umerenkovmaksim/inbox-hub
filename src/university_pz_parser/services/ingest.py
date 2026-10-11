@@ -70,6 +70,8 @@ class IngestService:
                 row = await self._find(s, item)
                 if row is not None and row.content_hash == digest:
                     row.extra = {**row.extra, **item.extra, **item.hashed_extra}
+                    if item.raw is not None:
+                        row.raw = item.raw
                     return IngestStatus.SAME
                 if row is not None:
                     attached = {k.remote_id for k in row.links if k.detached_at is None}
@@ -95,17 +97,71 @@ class IngestService:
             )
             return cursor or 0
 
+    async def channel_titles(self, source: Source) -> dict[str, str]:
+        async with self.sessions() as s:
+            rows = await s.execute(
+                select(Channel.external_id, Channel.title).where(
+                    Channel.source == source
+                )
+            )
+            return {external_id: title for external_id, title in rows}
+
     async def advance_cursor(
-        self, source: Source, external_id: str, value: int
+        self, source: Source, external_id: str, value: int, title: str | None = None
     ) -> None:
-        async with self.sessions.begin() as s:
+        async with self._lock, self.sessions.begin() as s:
             channel = await s.scalar(
                 select(Channel).where(
                     Channel.source == source, Channel.external_id == external_id
                 )
             )
-            if channel is not None and value > channel.cursor:
+            if channel is None:
+                if title is None:
+                    return
+                channel = Channel(
+                    source=source, external_id=external_id, title=title, cursor=0
+                )
+                s.add(channel)
+            if value > channel.cursor:
                 channel.cursor = value
+
+    async def mark_deleted(
+        self,
+        source: Source,
+        msg_ids: Sequence[int],
+        channel_external_id: str | None = None,
+        exclude_prefix: str | None = None,
+    ) -> int:
+        """Soft-delete items whose external key is ``{channel}:{msg_id}``.
+
+        Without ``channel_external_id`` the ids are matched in every channel of
+        ``source`` whose external id does not start with ``exclude_prefix``.
+        """
+        if not msg_ids:
+            return 0
+        async with self._lock, self.sessions.begin() as s:
+            if channel_external_id is not None:
+                channels = [channel_external_id]
+            else:
+                stmt = select(Channel.external_id).where(Channel.source == source)
+                if exclude_prefix is not None:
+                    stmt = stmt.where(
+                        Channel.external_id.not_like(f"{exclude_prefix}%")
+                    )
+                channels = list((await s.scalars(stmt)).all())
+            keys = [f"{c}:{i}" for c in channels for i in msg_ids]
+            if not keys:
+                return 0
+            result = await s.execute(
+                update(Item)
+                .where(
+                    Item.source == source,
+                    Item.external_key.in_(keys),
+                    Item.deleted_at.is_(None),
+                )
+                .values(deleted_at=self.clock())
+            )
+            return result.rowcount
 
     async def _collect_files(self, item: IncomingItem) -> list[IncomingFile]:
         files = list(item.files)
@@ -187,6 +243,8 @@ class IngestService:
                     **item.hashed_extra,
                     "skipped_files": result.skipped,
                 }
+                if item.raw is not None:
+                    existing.raw = item.raw
                 return IngestStatus.SAME
             channel = await self._channel(s, item)
             for sha, extraction in extractions.items():
@@ -235,6 +293,8 @@ class IngestService:
             row.content_hash = digest
             row.text_norm_hash = text_norm_hash(item.text)
             row.extra = extra
+            if item.raw is not None:
+                row.raw = item.raw
             self._sync_links(row, result, now)
             await s.flush()
             row.duplicate_of_id = await self._find_duplicate(s, row)

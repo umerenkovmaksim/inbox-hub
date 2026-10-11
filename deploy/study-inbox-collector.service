@@ -1,0 +1,24 @@
+[Unit]
+Description=Study Inbox Telegram collector
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=3600
+StartLimitBurst=10
+
+[Service]
+User=studyinbox
+WorkingDirectory=/opt/study-inbox
+EnvironmentFile=/opt/study-inbox/.env
+ExecStart=/opt/study-inbox/.venv/bin/university-pz-parser collect
+Restart=always
+# Slow restarts: frequent reconnects with the same session look suspicious.
+RestartSec=60
+KillSignal=SIGTERM
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/opt/study-inbox/data
+
+[Install]
+WantedBy=multi-user.target

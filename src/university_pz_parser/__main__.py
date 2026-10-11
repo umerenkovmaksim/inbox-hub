@@ -12,29 +12,47 @@ app = typer.Typer(no_args_is_help=True)
 
 @app.command()
 def login() -> None:
-    from university_pz_parser.sources.telegram.client import TelegramClientManager
+    from university_pz_parser.sources.telegram.client import (
+        SessionLock,
+        TelegramClientManager,
+    )
 
     async def run():
-        tg = TelegramClientManager(get_settings().telegram)
-        await tg.client.start()
-        me = await tg.client.get_me()
-        typer.echo(f"logged in as {me.first_name} ({me.id})")
-        await tg.stop()
+        settings = get_settings().telegram
+        with SessionLock(settings.lock_path):
+            tg = TelegramClientManager(settings)
+            try:
+                if await tg.connect():
+                    typer.echo("session is already authorized, nothing to do")
+                    return
+                await tg.client.start()
+                me = await tg.client.get_me()
+                typer.echo(f"logged in as {me.first_name} ({me.id})")
+            finally:
+                await tg.stop()
 
     asyncio.run(run())
 
 
 @app.command("list-chats")
 def list_chats() -> None:
-    from university_pz_parser.sources.telegram.client import TelegramClientManager
+    """One-off: needs the collector to be stopped (same session)."""
+    from university_pz_parser.sources.telegram.client import (
+        SessionLock,
+        TelegramClientManager,
+    )
 
     async def run():
-        tg = TelegramClientManager(get_settings().telegram)
-        await tg.start()
-        async for d in tg.client.iter_dialogs():
-            if d.is_group or d.is_channel:
-                typer.echo(f"{d.id}\t{d.name}")
-        await tg.stop()
+        settings = get_settings().telegram
+        with SessionLock(settings.lock_path):
+            tg = TelegramClientManager(settings)
+            try:
+                await tg.start()
+                async for d in tg.client.iter_dialogs():
+                    if d.is_group or d.is_channel:
+                        typer.echo(f"{d.id}\t{d.name}")
+            finally:
+                await tg.stop()
 
     asyncio.run(run())
 
@@ -51,13 +69,14 @@ def init_db() -> None:
 
 @app.command()
 def sync(source: str) -> None:
+    """One-off sync of a polled source (sdo). Telegram is handled by `collect`."""
     from university_pz_parser.container import Container
 
     async def run():
         c = await Container.build(get_settings())
         try:
-            if source == "telegram":
-                await c.tg.start()
+            if source not in c.jobs:
+                raise typer.BadParameter(f"unknown source {source!r}")
             report = await c.runner.run(c.jobs[source])
             typer.echo(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
         finally:
@@ -88,6 +107,15 @@ def import_export(
 
     configure_logging()
     asyncio.run(run())
+
+
+@app.command()
+def collect() -> None:
+    """Long-running Telegram collector: updates + periodic reconcile."""
+    from university_pz_parser.sources.telegram.runtime import run_collector
+
+    configure_logging()
+    asyncio.run(run_collector(get_settings()))
 
 
 @app.command()

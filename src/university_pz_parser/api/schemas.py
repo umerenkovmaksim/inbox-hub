@@ -52,6 +52,7 @@ class ItemOut(BaseModel):
     available_from: datetime | None
     duplicate_of_id: int | None
     received_at: datetime | None
+    deleted_at: datetime | None
     files: list[FileOut]
     removed_files: list[FileOut]
     skipped_files: list[SkippedFileOut]
@@ -121,6 +122,7 @@ def item_out(item: Item, text_limit: int | None) -> ItemOut:
         available_from=item.available_from,
         duplicate_of_id=item.duplicate_of_id,
         received_at=item.received_at,
+        deleted_at=item.deleted_at,
         files=[
             _file_out(k, item, text_limit) for k in item.links if k.detached_at is None
         ],

@@ -1,5 +1,10 @@
+import asyncio
+import json
+import logging
+from collections.abc import Collection
 from pathlib import Path
 
+from telethon.errors import FloodWaitError
 from telethon.tl.custom import Message
 from telethon.tl.types import (
     MessageMediaDocument,
@@ -11,7 +16,9 @@ from telethon.utils import get_display_name
 from university_pz_parser.domain.dto import IncomingFile, IncomingItem
 from university_pz_parser.enums import Source
 
-DOWNLOADABLE = {"photo", "document"}
+log = logging.getLogger(__name__)
+
+DOWNLOADABLE = frozenset({"photo", "document"})
 
 
 def message_link(chat_id: int, msg_id: int) -> str | None:
@@ -43,7 +50,12 @@ def message_kind(m) -> str | None:
 
 def _fetcher(m: Message):
     async def fetch(tmp: Path) -> Path:
-        path = await m.download_media(file=tmp)
+        try:
+            path = await m.download_media(file=tmp)
+        except FloodWaitError as exc:
+            log.warning("FloodWait %ss downloading media %s", exc.seconds, m.id)
+            await asyncio.sleep(exc.seconds)
+            path = await m.download_media(file=tmp)
         if path is None:
             raise RuntimeError(f"telegram media {m.id} not downloaded")
         return Path(path)
@@ -79,7 +91,20 @@ def _forwarded_from(m) -> str | None:
     return str(m.fwd_from.from_id) if m.fwd_from.from_id else None
 
 
-def to_incoming(chat_id: int, chat_title: str, m) -> IncomingItem | None:
+def raw_dict(m) -> dict | None:
+    try:
+        return json.loads(m.to_json())
+    except Exception:
+        log.warning("cannot serialize telegram message %s", m.id, exc_info=True)
+        return None
+
+
+def to_incoming(
+    chat_id: int,
+    chat_title: str,
+    m,
+    download_kinds: Collection[str] = DOWNLOADABLE,
+) -> IncomingItem | None:
     kind = message_kind(m)
     if kind is None:
         return None
@@ -91,7 +116,7 @@ def to_incoming(chat_id: int, chat_title: str, m) -> IncomingItem | None:
         "forwarded_from": _forwarded_from(m),
         "grouped_id": m.grouped_id,
     }
-    if kind in DOWNLOADABLE:
+    if kind in DOWNLOADABLE and kind in download_kinds:
         files = (_file(m, kind),)
     elif m.file is not None:
         extra["media"] = {
@@ -113,4 +138,5 @@ def to_incoming(chat_id: int, chat_title: str, m) -> IncomingItem | None:
         url=message_link(chat_id, m.id),
         files=files,
         extra=extra,
+        raw=raw_dict(m),
     )

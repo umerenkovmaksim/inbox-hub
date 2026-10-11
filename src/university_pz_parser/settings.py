@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +13,19 @@ class TelegramSettings(BaseModel):
     source_ids: list[int]
     session_path: Path = Path("data/telegram")
     backfill_from: datetime = datetime(2026, 9, 1, tzinfo=UTC)
-    edit_recheck_days: int = 3
+    device_model: str = "Study Inbox"
+    system_version: str = "Linux"
+    app_version: str = "1.0"
+    lang_code: str = "en"
+    system_lang_code: str = "en"
+    flood_sleep_threshold: int = Field(300, ge=300)
+    retry_delay: int = Field(10, ge=1)
+    reconcile_interval_hours: float = Field(4, gt=0)
+    download_kinds: set[Literal["document", "photo"]] = {"document", "photo"}
+
+    @property
+    def lock_path(self) -> Path:
+        return self.session_path.with_name(self.session_path.name + ".lock")
 
 
 class SdoSettings(BaseModel):

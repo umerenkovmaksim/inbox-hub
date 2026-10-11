@@ -38,3 +38,4 @@ class IncomingItem:
     hashed_extra: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
     channel_description: str | None = None
+    raw: dict[str, Any] | None = None
