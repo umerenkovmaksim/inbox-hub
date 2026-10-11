@@ -145,3 +145,23 @@ async def test_grade_is_structured_in_item(container):
     assert it["grade"]["value"] == 70.0 and it["grade"]["grader"] == "Преподаватель"
     assert it["grade"]["graded_at"].startswith("2026-10-02T10:00:00")
     assert "grade" not in it["extra"]
+
+
+async def test_telegram_dialogs_come_from_the_database(container):
+    """The API process never talks to Telegram: dialogs are the collector's snapshot."""
+    await container.ingest.record_dialogs([(-1001, "ИСиТ", "channel")])
+    async with client_for(container) as client:
+        r = await client.get(
+            "/admin/telegram/dialogs", headers={"Authorization": "Bearer secret"}
+        )
+        assert r.status_code == 200
+        [dialog] = r.json()
+        assert (dialog["id"], dialog["name"], dialog["kind"]) == (
+            -1001,
+            "ИСиТ",
+            "channel",
+        )
+        r = await client.post(
+            "/admin/sync/telegram", headers={"Authorization": "Bearer secret"}
+        )
+        assert r.status_code == 404

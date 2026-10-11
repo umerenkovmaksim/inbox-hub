@@ -142,6 +142,8 @@ class Item(Base):
     previous_text: Mapped[str | None] = mapped_column(Text)
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    raw: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     channel: Mapped[Channel] = relationship(lazy="joined")
     links: Mapped[list[ItemFile]] = relationship(
@@ -159,6 +161,19 @@ class Receipt(Base):
         ForeignKey("items.id", ondelete="CASCADE"), primary_key=True, index=True
     )
     received_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class TelegramDialog(Base):
+    """Snapshot of the account's groups and channels from the last reconcile."""
+
+    __tablename__ = "telegram_dialogs"
+
+    chat_id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=False
+    )
+    title: Mapped[str] = mapped_column(String(512))
+    kind: Mapped[str] = mapped_column(String(16))
+    seen_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
 class SourceHealth(Base):

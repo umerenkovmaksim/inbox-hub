@@ -59,3 +59,29 @@ def test_remove_negative_chat_id(cli):
     r = cli("chats", "remove", "-1005")
     assert r.exit_code == 0, r.output
     assert "telegram:-1005\t-" in cli("channels", "list").output
+
+
+def test_list_chats_reads_the_collector_snapshot(cli, tmp_path):
+    from inbox_hub.db.session import make_sessions
+    from inbox_hub.extractors.registry import ExtractorRegistry
+    from inbox_hub.services.ingest import IngestService
+    from inbox_hub.storage.files import FileStore
+
+    assert "no dialogs yet" in cli("list-chats").output
+
+    async def record():
+        engine = make_engine(get_settings().database.url)
+        ingest = IngestService(
+            make_sessions(engine),
+            FileStore(tmp_path / "files"),
+            ExtractorRegistry(),
+            [],
+            1,
+        )
+        await ingest.record_dialogs([(-1007, "Группа", "group")])
+        await engine.dispose()
+
+    asyncio.run(record())
+    result = cli("list-chats")
+    assert result.exit_code == 0
+    assert "-1007\tgroup\tГруппа" in result.output

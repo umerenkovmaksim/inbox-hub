@@ -75,26 +75,21 @@ async def list_channels(c: Container = Depends(get_container)):
 
 @router.post("/telegram/chats", response_model=ChannelOut)
 async def track_chat(body: TrackChatIn, c: Container = Depends(get_container)):
-    channel = await _call(c.catalog.track_chat(body.chat_id, body.categories))
-    await c.refresh_tracked_chats()
-    return channel_out(channel)
+    # The collector re-reads tracked chats within a minute.
+    return channel_out(await _call(c.catalog.track_chat(body.chat_id, body.categories)))
 
 
 @router.delete("/telegram/chats/{chat_id}", response_model=ChannelOut)
 async def untrack_chat(chat_id: int, c: Container = Depends(get_container)):
-    channel = await _call(c.catalog.untrack_chat(chat_id))
-    await c.refresh_tracked_chats()
-    return channel_out(channel)
+    return channel_out(await _call(c.catalog.untrack_chat(chat_id)))
 
 
 @router.get("/telegram/dialogs")
 async def telegram_dialogs(c: Container = Depends(get_container)):
-    if c.tg is None or "telegram" not in c.jobs:
-        raise HTTPException(status_code=503, detail="telegram is not running")
+    """Groups and channels as of the collector's last reconcile; no Telegram call."""
     return [
-        {"id": d.id, "name": d.name}
-        async for d in c.tg.client.iter_dialogs()
-        if d.is_group or d.is_channel
+        {"id": d.chat_id, "name": d.title, "kind": d.kind, "seen_at": d.seen_at}
+        for d in await c.catalog.telegram_dialogs()
     ]
 
 

@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -13,16 +12,12 @@ from inbox_hub.services.catalog import CatalogService
 from inbox_hub.services.feed import FeedService
 from inbox_hub.services.health import HealthService
 from inbox_hub.services.ingest import IngestService
-from inbox_hub.services.jobs import Job, JobRunner, SyncReport
+from inbox_hub.services.jobs import Job, JobRunner
 from inbox_hub.settings import Settings
 from inbox_hub.sources.sdo.client import SdoHttp
 from inbox_hub.sources.sdo.rest import SdoRest
 from inbox_hub.sources.sdo.source import SdoSource
-from inbox_hub.sources.telegram.client import TelegramClientManager
-from inbox_hub.sources.telegram.source import TelegramSource
 from inbox_hub.storage.files import FileStore
-
-log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,7 +34,6 @@ class Container:
     health: HealthService
     runner: JobRunner
     jobs: dict[str, Job] = field(default_factory=dict)
-    tg: TelegramClientManager | None = None
     extra_clients: list[httpx.AsyncClient] = field(default_factory=list)
 
     @classmethod
@@ -68,11 +62,6 @@ class Container:
             runner=JobRunner(health),
         )
         if with_sources:
-            tg = TelegramClientManager(settings.telegram)
-            c.tg = tg
-            c.jobs["telegram"] = TelegramSource(
-                tg.client, ingest, catalog, settings.telegram
-            )
             sdo_http = httpx.AsyncClient(timeout=120, follow_redirects=True)
             c.extra_clients.append(sdo_http)
             c.jobs["sdo"] = SdoSource(
@@ -84,24 +73,7 @@ class Container:
             )
         return c
 
-    async def start(self) -> None:
-        if self.tg is not None:
-            try:
-                await self.tg.start()
-                self.jobs["telegram"].register_handlers()
-            except Exception as exc:
-                log.exception("telegram unavailable, running without it")
-                self.jobs.pop("telegram", None)
-                await self.health.record(SyncReport("telegram", error=repr(exc)))
-
-    async def refresh_tracked_chats(self) -> None:
-        job = self.jobs.get("telegram")
-        if job is not None:
-            await job.refresh_tracked()
-
     async def stop(self) -> None:
-        if self.tg is not None:
-            await self.tg.stop()
         for client in self.extra_clients:
             await client.aclose()
         await self.http.aclose()

@@ -9,7 +9,15 @@ from enum import StrEnum
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from inbox_hub.db.models import Category, Channel, File, Item, ItemFile, Receipt
+from inbox_hub.db.models import (
+    Category,
+    Channel,
+    File,
+    Item,
+    ItemFile,
+    Receipt,
+    TelegramDialog,
+)
 from inbox_hub.domain.dto import IncomingFile, IncomingItem
 from inbox_hub.domain.hashing import content_hash, text_norm_hash
 from inbox_hub.enums import Source
@@ -70,6 +78,8 @@ class IngestService:
                 row = await self._find(s, item)
                 if row is not None and row.content_hash == digest:
                     row.extra = {**row.extra, **item.extra, **item.hashed_extra}
+                    if item.raw is not None:
+                        row.raw = item.raw
                     return IngestStatus.SAME
                 if row is not None:
                     attached = {k.remote_id for k in row.links if k.detached_at is None}
@@ -95,10 +105,19 @@ class IngestService:
             )
             return cursor or 0
 
+    async def channel_titles(self, source: Source) -> dict[str, str]:
+        async with self.sessions() as s:
+            rows = await s.execute(
+                select(Channel.external_id, Channel.title).where(
+                    Channel.source == source
+                )
+            )
+            return {external_id: title for external_id, title in rows}
+
     async def advance_cursor(
         self, source: Source, external_id: str, value: int
     ) -> None:
-        async with self.sessions.begin() as s:
+        async with self._lock, self.sessions.begin() as s:
             channel = await s.scalar(
                 select(Channel).where(
                     Channel.source == source, Channel.external_id == external_id
@@ -106,6 +125,66 @@ class IngestService:
             )
             if channel is not None and value > channel.cursor:
                 channel.cursor = value
+
+    async def record_dialogs(self, dialogs: Sequence[tuple[int, str, str]]) -> None:
+        """Replace the Telegram dialog snapshot and refresh known chat titles."""
+        now = self.clock()
+        titles = {str(chat_id): title for chat_id, title, _ in dialogs}
+        async with self._lock, self.sessions.begin() as s:
+            await s.execute(delete(TelegramDialog))
+            s.add_all(
+                TelegramDialog(chat_id=chat_id, title=title, kind=kind, seen_at=now)
+                for chat_id, title, kind in dialogs
+            )
+            channels = await s.scalars(
+                select(Channel).where(
+                    Channel.source == Source.TELEGRAM,
+                    Channel.external_id.in_(titles),
+                )
+            )
+            for channel in channels:
+                channel.title = titles[channel.external_id]
+
+    async def mark_deleted(
+        self,
+        source: Source,
+        msg_ids: Sequence[int],
+        channel_external_id: str | None = None,
+        exclude_prefix: str | None = None,
+    ) -> int:
+        """Soft-delete items whose external key is ``{channel}:{msg_id}``.
+
+        Without ``channel_external_id`` the ids are matched in every tracked
+        channel of ``source`` whose external id does not start with
+        ``exclude_prefix``.
+        """
+        if not msg_ids:
+            return 0
+        async with self._lock, self.sessions.begin() as s:
+            if channel_external_id is not None:
+                channels = [channel_external_id]
+            else:
+                stmt = select(Channel.external_id).where(
+                    Channel.source == source, Channel.tracked.is_(True)
+                )
+                if exclude_prefix is not None:
+                    stmt = stmt.where(
+                        Channel.external_id.not_like(f"{exclude_prefix}%")
+                    )
+                channels = list((await s.scalars(stmt)).all())
+            keys = [f"{c}:{i}" for c in channels for i in msg_ids]
+            if not keys:
+                return 0
+            result = await s.execute(
+                update(Item)
+                .where(
+                    Item.source == source,
+                    Item.external_key.in_(keys),
+                    Item.deleted_at.is_(None),
+                )
+                .values(deleted_at=self.clock())
+            )
+            return result.rowcount
 
     async def _collect_files(self, item: IncomingItem) -> list[IncomingFile]:
         files = list(item.files)
@@ -187,6 +266,8 @@ class IngestService:
                     **item.hashed_extra,
                     "skipped_files": result.skipped,
                 }
+                if item.raw is not None:
+                    existing.raw = item.raw
                 return IngestStatus.SAME
             channel = await self._channel(s, item)
             for sha, extraction in extractions.items():
@@ -235,6 +316,8 @@ class IngestService:
             row.content_hash = digest
             row.text_norm_hash = text_norm_hash(item.text)
             row.extra = extra
+            if item.raw is not None:
+                row.raw = item.raw
             self._sync_links(row, result, now)
             await s.flush()
             row.duplicate_of_id = await self._find_duplicate(s, row)
