@@ -13,7 +13,7 @@ from telethon.tl.types import (
     PeerUser,
 )
 
-from university_pz_parser.sources.telegram.mapping import message_link, to_incoming
+from inbox_hub.sources.telegram.mapping import message_link, to_incoming
 
 DT = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
 CHAT = -1002362006703

@@ -6,7 +6,7 @@ import openpyxl
 import pptx
 from pypdf import PdfWriter
 
-from university_pz_parser.extractors.registry import ExtractorRegistry
+from inbox_hub.extractors.registry import ExtractorRegistry
 
 
 def _pdf_with_text(path, text):

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 
-import university_pz_parser.db.types
+import inbox_hub.db.types
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -48,12 +48,8 @@ def upgrade() -> None:
     op.create_table(
         "source_health",
         sa.Column("source", sa.String(length=32), nullable=False),
-        sa.Column(
-            "last_run_at", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
-        sa.Column(
-            "last_ok_at", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
+        sa.Column("last_run_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
+        sa.Column("last_ok_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("last_report", sa.JSON(), nullable=False),
         sa.PrimaryKeyConstraint("source"),
@@ -69,30 +65,18 @@ def upgrade() -> None:
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("author", sa.String(length=512), nullable=True),
         sa.Column("url", sa.String(length=2048), nullable=True),
-        sa.Column(
-            "published_at", university_pz_parser.db.types.UTCDateTime(), nullable=False
-        ),
-        sa.Column(
-            "edited_at", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
-        sa.Column("due_at", university_pz_parser.db.types.UTCDateTime(), nullable=True),
-        sa.Column(
-            "available_from", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
-        sa.Column(
-            "first_seen_at", university_pz_parser.db.types.UTCDateTime(), nullable=False
-        ),
-        sa.Column(
-            "updated_at", university_pz_parser.db.types.UTCDateTime(), nullable=False
-        ),
+        sa.Column("published_at", inbox_hub.db.types.UTCDateTime(), nullable=False),
+        sa.Column("edited_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
+        sa.Column("due_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
+        sa.Column("available_from", inbox_hub.db.types.UTCDateTime(), nullable=True),
+        sa.Column("first_seen_at", inbox_hub.db.types.UTCDateTime(), nullable=False),
+        sa.Column("updated_at", inbox_hub.db.types.UTCDateTime(), nullable=False),
         sa.Column("content_hash", sa.String(length=64), nullable=False),
         sa.Column("text_norm_hash", sa.String(length=64), nullable=True),
         sa.Column("edited", sa.Boolean(), nullable=False),
         sa.Column("previous_text", sa.Text(), nullable=True),
         sa.Column("duplicate_of_id", sa.Integer(), nullable=True),
-        sa.Column(
-            "received_at", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
+        sa.Column("received_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
         sa.Column("extra", sa.JSON(), nullable=False),
         sa.ForeignKeyConstraint(
             ["channel_id"],
@@ -129,12 +113,8 @@ def upgrade() -> None:
         sa.Column("remote_id", sa.String(length=1024), nullable=False),
         sa.Column("name", sa.String(length=512), nullable=True),
         sa.Column("url", sa.String(length=2048), nullable=True),
-        sa.Column(
-            "attached_at", university_pz_parser.db.types.UTCDateTime(), nullable=False
-        ),
-        sa.Column(
-            "detached_at", university_pz_parser.db.types.UTCDateTime(), nullable=True
-        ),
+        sa.Column("attached_at", inbox_hub.db.types.UTCDateTime(), nullable=False),
+        sa.Column("detached_at", inbox_hub.db.types.UTCDateTime(), nullable=True),
         sa.ForeignKeyConstraint(
             ["file_sha256"],
             ["files.sha256"],

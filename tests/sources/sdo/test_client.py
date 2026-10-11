@@ -3,8 +3,8 @@ from pathlib import Path
 import httpx
 import respx
 
-from university_pz_parser.settings import SdoSettings
-from university_pz_parser.sources.sdo.client import SdoHttp
+from inbox_hub.settings import SdoSettings
+from inbox_hub.sources.sdo.client import SdoHttp
 
 FX = Path(__file__).parents[2] / "fixtures" / "sdo"
 BASE = "https://sdo.test"

@@ -1,7 +1,7 @@
 import httpx
 import respx
 
-from university_pz_parser.resolvers.yandex_disk import API, YandexDiskResolver
+from inbox_hub.resolvers.yandex_disk import API, YandexDiskResolver
 
 
 @respx.mock

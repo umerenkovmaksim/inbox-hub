@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from university_pz_parser.sources.sdo import html
+from inbox_hub.sources.sdo import html
 
 FX = Path(__file__).parents[2] / "fixtures" / "sdo"
 MSK = ZoneInfo("Europe/Moscow")

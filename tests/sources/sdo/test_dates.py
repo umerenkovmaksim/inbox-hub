@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from university_pz_parser.sources.sdo.dates import parse_ru_datetime
+from inbox_hub.sources.sdo.dates import parse_ru_datetime
 
 MSK = ZoneInfo("Europe/Moscow")
 

@@ -1,21 +1,17 @@
 from datetime import UTC, datetime
 
-import httpx
-import pytest
-
-from university_pz_parser.api.app import create_app
-from university_pz_parser.container import Container
-from university_pz_parser.domain.dto import IncomingFile, IncomingItem
-from university_pz_parser.enums import Source
+from inbox_hub.container import Container
+from inbox_hub.domain.dto import IncomingFile, IncomingItem
+from inbox_hub.enums import Source
+from tests.api.conftest import client_for
 
 H = {"Authorization": "Bearer secret"}
 
 
-@pytest.fixture
-async def container(settings, engine):
-    c = await Container.build(settings, with_sources=False)
-    yield c
-    await c.stop()
+async def study_key(c) -> dict[str, str]:
+    await c.catalog.create_category("study", "Учёба", auto_sources=["sdo"])
+    _, token = await c.catalog.create_key("study-digest", ["study"])
+    return {"Authorization": f"Bearer {token}"}
 
 
 async def seed(c):
@@ -40,12 +36,6 @@ async def seed(c):
     )
 
 
-def client_for(container):
-    return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=create_app(container)), base_url="http://t"
-    )
-
-
 async def test_auth_required(container):
     async with client_for(container) as client:
         r = await client.get(
@@ -59,6 +49,7 @@ async def test_auth_required(container):
 
 
 async def test_items_flow(container):
+    H = await study_key(container)
     await seed(container)
     params = {"from": "2026-10-01T00:00:00+03:00", "to": "2026-10-02T00:00:00+03:00"}
     async with client_for(container) as client:
@@ -66,6 +57,7 @@ async def test_items_flow(container):
         assert body["count"] == 1
         it = body["items"][0]
         assert it["channel"] == "МИС" and it["source"] == "sdo"
+        assert it["categories"] == ["study"]
         f = it["files"][0]
         assert len(f["text"]) == 4000 and f["text_truncated"] is True
         full = (await client.get(f"/items/{it['id']}", headers=H)).json()
@@ -94,7 +86,7 @@ async def test_admin_unknown_source(container):
 
 
 async def test_empty_token_is_never_accepted(settings, engine):
-    from university_pz_parser.settings import ApiSettings
+    from inbox_hub.settings import ApiSettings
 
     settings.api = ApiSettings(token="")
     c = await Container.build(settings, with_sources=False)
@@ -108,6 +100,7 @@ async def test_empty_token_is_never_accepted(settings, engine):
 
 
 async def test_item_exposes_updated_at(container):
+    H = await study_key(container)
     await seed(container)
     params = {"from": "2026-10-01T00:00:00+03:00", "to": "2026-10-02T00:00:00+03:00"}
     async with client_for(container) as client:

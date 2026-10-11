@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from university_pz_parser.cli.import_export import export_to_items
+from inbox_hub.cli.import_export import export_to_items
 
 FX = Path(__file__).parents[1] / "fixtures" / "tg_export.json"
 

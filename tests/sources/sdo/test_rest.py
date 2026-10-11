@@ -1,8 +1,8 @@
 import httpx
 import respx
 
-from university_pz_parser.settings import SdoSettings
-from university_pz_parser.sources.sdo.rest import SdoRest
+from inbox_hub.settings import SdoSettings
+from inbox_hub.sources.sdo.rest import SdoRest
 
 BASE = "https://sdo.test"
 

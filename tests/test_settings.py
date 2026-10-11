@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from university_pz_parser.settings import Settings
+from inbox_hub.settings import Settings
 
 
 def test_nested_env(monkeypatch, tmp_path):

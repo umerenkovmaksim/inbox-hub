@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from university_pz_parser.domain.hashing import content_hash
-from university_pz_parser.sources.sdo.html import (
+from inbox_hub.domain.hashing import content_hash
+from inbox_hub.sources.sdo.html import (
     CoursePage,
     Gradebook,
     GradeInfo,
@@ -10,7 +10,7 @@ from university_pz_parser.sources.sdo.html import (
     ModuleRef,
     SectionRef,
 )
-from university_pz_parser.sources.sdo.source import Course, ModuleDetails, build_items
+from inbox_hub.sources.sdo.source import Course, ModuleDetails, build_items
 
 MSK = ZoneInfo("Europe/Moscow")
 COURSE = Course(id=3430, name="Моделирование информационных систем", summary="09.03.02")

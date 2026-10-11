@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from university_pz_parser.db.models import Channel, File, Item, ItemFile
-from university_pz_parser.enums import Source
+from inbox_hub.db.models import Channel, File, Item, ItemFile
+from inbox_hub.enums import Source
 
 
 async def test_roundtrip_keeps_utc(sessions):
