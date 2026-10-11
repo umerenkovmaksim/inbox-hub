@@ -16,12 +16,21 @@ x-env: &env
   API__TOKEN: ${API__TOKEN:?}
 
 services:
-  migrate:
+  # API + СДО. Applies migrations before serving, so "healthy" means the
+  # database schema is current.
+  study-inbox:
     build: .
-    command: ["university-pz-parser", "init-db"]
+    command: ["sh", "-c", "university-pz-parser init-db && exec university-pz-parser serve"]
+    restart: unless-stopped
     environment: *env
     volumes:
       - inbox-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   # The only process that talks to Telegram. Exactly one instance.
   collector:
@@ -33,19 +42,8 @@ services:
     volumes:
       - inbox-data:/app/data
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-
-  study-inbox:
-    build: .
-    command: ["university-pz-parser", "serve"]
-    restart: unless-stopped
-    environment: *env
-    volumes:
-      - inbox-data:/app/data
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+      study-inbox:
+        condition: service_healthy
 
 volumes:
   inbox-data:

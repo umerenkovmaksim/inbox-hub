@@ -57,6 +57,6 @@ uv run university-pz-parser serve     # HTTP API + СДО по расписан�
 
 ## Деплой
 
-`docker compose up -d` поднимает `migrate` (разово), `collector` и `study-inbox` на общем томе.
+`docker compose up -d` поднимает `study-inbox` (сначала применяет миграции, затем `serve`) и `collector`, который стартует только после того, как `study-inbox` стал healthy. Оба на общем томе `inbox-data`.
 
 Без Docker: скопировать [deploy/study-inbox.service](deploy/study-inbox.service) и [deploy/study-inbox-collector.service](deploy/study-inbox-collector.service) в `/etc/systemd/system/`, [deploy/Caddyfile](deploy/Caddyfile) в конфигурацию Caddy и выполнить `systemctl enable --now study-inbox study-inbox-collector`.
