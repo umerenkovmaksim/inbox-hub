@@ -18,6 +18,11 @@ app.add_typer(categories_app, name="categories")
 app.add_typer(channels_app, name="channels")
 app.add_typer(chats_app, name="chats")
 app.add_typer(keys_app, name="keys")
+catalog_app = typer.Typer(
+    no_args_is_help=True,
+    help="Categories, chats and key scopes from a YAML file (plan, apply, export).",
+)
+app.add_typer(catalog_app, name="catalog")
 
 
 def _catalog(action):
@@ -154,6 +159,94 @@ def keys_grant(name: str, slug: str) -> None:
 def keys_ungrant(name: str, slug: str) -> None:
     k = _catalog(lambda cat: cat.ungrant(name, slug))
     typer.echo(f"{k.name}: {_slugs(k.categories)}")
+
+
+CATALOG_FILE = typer.Option(
+    Path("catalog.yaml"), "--file", "-f", help="catalog file, '-' for stdin"
+)
+PRUNE = typer.Option(
+    False,
+    help="also remove categories, channels, chats and grants missing from the file",
+)
+
+
+def _catalog_file(action):
+    from inbox_hub.services.catalog_file import CatalogFile
+
+    return _catalog(lambda cat: action(CatalogFile(cat.sessions)))
+
+
+def _read_spec(file: Path):
+    import sys
+
+    from inbox_hub.services.catalog import CatalogError
+    from inbox_hub.services.catalog_file import parse_spec
+
+    try:
+        text = (
+            sys.stdin.read() if str(file) == "-" else file.read_text(encoding="utf-8")
+        )
+        return parse_spec(text)
+    except (OSError, CatalogError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from None
+
+
+def _print_plan(plan) -> None:
+    for w in plan.warnings:
+        typer.echo(f"! {w}", err=True)
+    for c in plan.changes:
+        typer.echo(str(c))
+    if plan.pending:
+        typer.echo("not removed without --prune:")
+        for c in plan.pending:
+            typer.echo(f"  {c}")
+    if not plan.changes:
+        typer.echo("no changes")
+
+
+@catalog_app.command("plan")
+def catalog_plan(file: Path = CATALOG_FILE, prune: bool = PRUNE) -> None:
+    """Show what `apply` would change; touches nothing."""
+    spec = _read_spec(file)
+    _print_plan(_catalog_file(lambda cf: cf.plan(spec, prune)))
+
+
+@catalog_app.command("apply")
+def catalog_apply(
+    file: Path = CATALOG_FILE,
+    prune: bool = PRUNE,
+    yes: bool = typer.Option(False, "--yes", "-y", help="do not ask for confirmation"),
+) -> None:
+    """Bring the database in line with the file, in one transaction."""
+    spec = _read_spec(file)
+    preview = _catalog_file(lambda cf: cf.plan(spec, prune))
+    _print_plan(preview)
+    if not preview.changes:
+        return
+    if not yes:
+        if str(file) == "-":
+            typer.echo("error: reading the file from stdin needs --yes", err=True)
+            raise typer.Exit(1)
+        typer.confirm("apply?", abort=True)
+    plan = _catalog_file(lambda cf: cf.apply(spec, prune))
+    typer.echo(f"applied {len(plan.changes)} changes")
+    for name, token in plan.tokens.items():
+        typer.echo(f"token for {name} (shown once): {token}")
+
+
+@catalog_app.command("export")
+def catalog_export(
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="write here instead of stdout"
+    ),
+) -> None:
+    """Current categories, chats and key scopes as a catalog file."""
+    text = _catalog_file(lambda cf: cf.export())
+    if output is None:
+        typer.echo(text, nl=False)
+    else:
+        output.write_text(text, encoding="utf-8")
 
 
 @app.command()
