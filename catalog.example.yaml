@@ -1,0 +1,25 @@
+# Категории, их каналы, отслеживаемые Telegram-чаты и доступ ключей.
+# Скопируйте в catalog.yaml и проверьте: `inbox-hub catalog plan`, затем `inbox-hub catalog apply`.
+# Без --prune apply только добавляет и обновляет; удаления — только с --prune.
+
+categories:
+  study:
+    title: Учёба
+    description: курсы СДО и учебные чаты
+    auto_sources: [sdo]               # новые курсы СДО попадают сюда сами
+    channels:
+      - telegram:-1009876543210       # Группа ПИ-21 (чат из категории всегда собирается)
+    exclude:
+      - sdo:1234                      # убрать курс, попавший сюда автоматически
+  work:
+    title: Работа
+    channels:
+      - telegram:-1001234567890       # Рабочий чат
+
+telegram:
+  track: []    # собирать без категорий (видит только admin)
+  paused: []   # не собирать, но оставить в категориях
+
+keys:
+  study-digest:
+    categories: [study]   # токен печатается один раз при создании

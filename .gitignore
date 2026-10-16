@@ -7,3 +7,4 @@ __pycache__/
 .superpowers/
 data/
 .pytest_cache/
+catalog.yaml
