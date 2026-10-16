@@ -85,3 +85,50 @@ def test_list_chats_reads_the_collector_snapshot(cli, tmp_path):
     result = cli("list-chats")
     assert result.exit_code == 0
     assert "-1007\tgroup\tГруппа" in result.output
+
+
+def test_catalog_plan_apply_export(cli, tmp_path):
+    file = tmp_path / "catalog.yaml"
+    file.write_text(
+        "categories:\n"
+        "  work:\n"
+        "    title: Работа\n"
+        "    channels: [telegram:-1005]\n"
+        "keys:\n"
+        "  work-digest: {categories: [work]}\n",
+        encoding="utf-8",
+    )
+    plan = cli("catalog", "plan", "-f", str(file))
+    assert plan.exit_code == 0, plan.output
+    assert "+ category work" in plan.output
+    assert cli("categories", "list").output == ""
+
+    declined = CliRunner().invoke(
+        app, ["catalog", "apply", "-f", str(file)], input="n\n"
+    )
+    assert declined.exit_code == 1 and cli("categories", "list").output == ""
+
+    applied = cli("catalog", "apply", "-f", str(file), "--yes")
+    assert applied.exit_code == 0, applied.output
+    assert "token for work-digest (shown once): ihk_" in applied.output
+    assert "telegram:-1005\ttracked\twork" in cli("channels", "list").output
+    assert "no changes" in cli("catalog", "plan", "-f", str(file), "--prune").output
+
+    exported = cli("catalog", "export")
+    assert "  work:\n    title: Работа" in exported.output
+    stdin = CliRunner().invoke(
+        app, ["catalog", "apply", "-f", "-"], input=exported.output
+    )
+    assert stdin.exit_code == 0 and "no changes" in stdin.output
+
+
+def test_catalog_errors_exit_nonzero(cli, tmp_path):
+    missing = cli("catalog", "plan", "-f", str(tmp_path / "nope.yaml"))
+    assert missing.exit_code == 1 and "error:" in missing.output
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("keys:\n  k: {categories: [nope]}\n", encoding="utf-8")
+    r = cli("catalog", "apply", "-f", str(bad), "--yes")
+    assert r.exit_code == 1 and "unknown categories" in r.output
+    bad.write_text("categories:\n  a: {title: x}\n", encoding="utf-8")
+    r = CliRunner().invoke(app, ["catalog", "apply", "-f", "-"], input=bad.read_text())
+    assert r.exit_code == 1 and "needs --yes" in r.output

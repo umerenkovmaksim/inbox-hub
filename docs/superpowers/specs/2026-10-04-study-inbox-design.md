@@ -74,7 +74,7 @@ docx, pdf, pptx, xlsx, ipynb, txt/md/csv/py, zip (recursive, depth 2). Runs in `
 
 ## CLI
 
-`login` (needs the collector stopped), `list-chats` (reads the dialog snapshot), `init-db`, `sync sdo`, `import-export FILE`, `collect`, `serve`, plus `categories`/`channels`/`chats`/`keys`.
+`login` (needs the collector stopped), `list-chats` (reads the dialog snapshot), `init-db`, `sync sdo`, `import-export FILE`, `collect`, `serve`, plus `categories`/`channels`/`chats`/`keys` and `catalog plan|apply|export`: the same catalog declared in a YAML file (`services/catalog_file.py`). Apply reconciles in one transaction; additions always apply, removals only with `--prune`, except explicit `exclude`/`telegram.paused`. Auto-source members are never pruned. Tokens never live in the file: a new key's token is printed once, `rotate`/`revoke` stay commands.
 
 ## Out of scope
 
