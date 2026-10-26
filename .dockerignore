@@ -1,8 +1,16 @@
 .git
+.github
+.vscode
 .venv
 .env
 .env.*
 data
+catalog.yaml
+compose.override.yaml
+compose.override.yml
+local
+dist
+.DS_Store
 *.session
 *.session-journal
 .superpowers

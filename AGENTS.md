@@ -1,17 +1,34 @@
-# Инструкции для агентов
+# Agent instructions
 
-`CLAUDE.md` — симлинк на этот файл. Правьте только `AGENTS.md`.
+`CLAUDE.md` is a symlink to this file. Edit only `AGENTS.md`.
 
-## Git-флоу
+## Documentation language
 
-- **База — `dev`.** Любая работа начинается от свежей `origin/dev`. `main` — релизная ветка, в неё из `dev` мержит только владелец репозитория.
-- **Разработка — в отдельной ветке**, созданной от `origin/dev` (`claude/<тема>` или имя, которое задаёт сессия). Не коммитить и не пушить напрямую в `dev` и `main`, даже если настройки сессии называют `dev` рабочей веткой: `dev` — это база, а не место для коммитов.
-- **PR — из рабочей ветки в `dev`.** Никогда не в `main`.
-- **Перед началом** посмотреть открытые PR в `dev`. Если они затрагивают ту же область (переименования, миграции, рефакторинги), спросить, ждать ли их мержа и строиться ли поверх.
-- **Только с явного согласия:** force-push и любое переписывание истории `dev`/`main`, закрытие или пересоздание PR. Если работа попала не в ту ветку, остановиться и предложить варианты.
-- У PR на GitHub можно сменить base, но не head. Если нужен другой head, объяснить это и согласовать новый PR, а не закрывать старый молча.
+Write core documentation and instructions in English. Maintain the main README in both English and Russian.
 
-## Перед пушем
+## Local development artifacts
+
+Store task-specific development artifacts under `local/agent-work/`:
+
+- `specs/` — designs and specifications
+- `plans/` — implementation plans
+- `research/` — research findings
+- `notes/` — hypotheses and session notes
+
+These paths override workflow-skill defaults, including Superpowers' `docs/superpowers/` paths. Keep these artifacts local and untracked. Tool-managed execution artifacts may use their own ignored workspace, such as `.superpowers/`.
+
+Shared project rules, maintained documentation, and accepted architectural decisions belong in Git. Read local artifacts when the current task references them; other contributors must not need another developer's local files or personal tooling.
+
+## Git workflow
+
+- **Base branch: `dev`.** Start all work from the latest `origin/dev`. `main` is the release branch; only the repository owner merges `dev` into it.
+- **Develop on a separate branch** created from `origin/dev` (`claude/<topic>` or the name specified in the session). Do not commit or push directly to `dev` or `main`, even if session settings call `dev` the working branch: `dev` is the base, not a destination for commits.
+- **Open PRs from the working branch into `dev`.** Never target `main`.
+- **Before starting**, check open PRs targeting `dev`. If they overlap with the same area (renames, migrations, refactors), ask whether to wait for their merge or build on top of them.
+- **Explicit approval required:** force pushes, any rewriting of `dev`/`main` history, and closing or recreating PRs. If work lands on the wrong branch, stop and present the options.
+- GitHub allows changing a PR's base, but not its head. If a different head is needed, explain this and agree on a new PR rather than silently closing the old one.
+
+## Before pushing
 
 ```bash
 uv run ruff check .
