@@ -25,6 +25,9 @@ services:
     environment: *env
     volumes:
       - inbox-data:/app/data
+      - type: bind
+        source: ./catalog.yaml
+        target: /app/catalog.yaml
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2)"]
       interval: 10s
