@@ -1,108 +1,162 @@
 # Inbox Hub
 
-Собирает сообщения Telegram-чатов и материалы СДО (`sdo.timacad.ru`) в одну базу, достаёт текст из файлов и раскладывает каналы по **категориям**: учёба, работа, анонсы, хакатоны, новости и так далее. ИИ получает ленту за промежуток времени через HTTP API и MCP, причём каждый API-ключ видит только свои категории. Термины описаны в [CONTEXT.md](CONTEXT.md), решения — в [спецификации](docs/superpowers/specs/2026-10-04-study-inbox-design.md).
+**One inbox for scattered information. A focused feed for your AI.**
 
-## Настройка
+[English](README.md) · [Русский](README.ru.md)
+
+![Python 3.14+](https://img.shields.io/badge/Python-3.14%2B-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-supported-222222)](mcp_adapter/README.md)
+
+Inbox Hub is a self-hosted service that collects messages, materials, and attachments into a feed for AI clients. Organize channels into categories, give each client access to the categories it needs, and retrieve new or updated items through HTTP or the Model Context Protocol (MCP).
+
+Use it to prepare a daily briefing, catch up on a project, or find the materials behind an upcoming deadline. Your AI client writes the summary; Inbox Hub supplies the context and enforces access to it.
+
+## What it does
+
+- **Brings context together.** Keeps items and attachments in one local store, grouped into categories such as work, study, and announcements.
+- **Extracts attachment text.** Reads PDF, DOCX, PPTX, XLSX, notebooks, text files, and ZIP archives so clients can retrieve content as well as originals.
+- **Surfaces changes.** Tracks edits and replaced attachments; changed items become available again to clients that previously received them.
+- **Keeps feeds independent.** Each API key has its own category scope and Received state. A daily briefing does not consume another client's feed.
+- **Fits your workflow.** Offers an HTTP API, an MCP adapter, CLI management, and a declarative YAML catalog.
+
+## A briefing, for example
+
+Ask an MCP-connected client:
+
+> What changed in my work channels yesterday? Highlight deadlines and link to the original materials.
+
+The client retrieves the relevant window and categories. The equivalent HTTP request is:
 
 ```bash
-uv sync
+curl --get http://127.0.0.1:8000/items \
+  -H "Authorization: Bearer $INBOX_TOKEN" \
+  --data-urlencode 'from=2026-10-01T00:00:00+03:00' \
+  --data-urlencode 'to=2026-10-02T00:00:00+03:00' \
+  --data-urlencode 'categories=work'
+```
+
+An illustrative response excerpt, with fictional data:
+
+```json
+{
+  "items": [
+    {
+      "id": 42,
+      "channel": "Project announcements",
+      "categories": ["work"],
+      "text": "The project brief was updated. Please send feedback by October 3.",
+      "published_at": "2026-10-01T09:00:00+03:00",
+      "edited": true,
+      "files": [
+        {
+          "name": "project-brief.pdf",
+          "text": "Review deadline: October 3. The delivery schedule has been updated.",
+          "text_status": "ok"
+        }
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+
+The client could turn this into:
+
+> **Project brief updated.** Feedback is due October 3. The attachment includes a revised delivery schedule.
+
+This is a documentation example, not a hosted demo. Full responses include item metadata, source links when available, and file identifiers; see the [API guide](docs/api.md). Clients can mark items Received after processing them.
+
+## How it works
+
+```mermaid
+flowchart LR
+    Sources[Information sources] --> Ingest[Collect and process]
+    Ingest --> Store[(Items and files)]
+    Store --> API[Scoped HTTP API]
+    API --> MCP[MCP adapter]
+    MCP --> AI[AI client]
+    API --> Tools[Your scripts and tools]
+```
+
+The server stores data in SQLite and local files. The MCP adapter runs beside your AI client and talks to the server over HTTP locally or HTTPS remotely. The server enforces category access using the API key supplied by the client.
+
+## Quick start
+
+You need **Python 3.14+**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and source credentials described in the [configuration guide](docs/configuration.md). The following example connects a Telegram chat.
+
+### 1. Install and configure
+
+```bash
+git clone https://github.com/umerenkovmaksim/inbox-hub.git
+cd inbox-hub
+uv sync --locked
 cp .env.example .env
+uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Fill in `.env`, using the generated value for `API__TOKEN`. Then initialize the database and authorize your account once:
+
+```bash
 uv run inbox-hub init-db
-uv run inbox-hub login        # один раз; сессия сохраняется в data/telegram.session
+uv run inbox-hub login
 ```
 
-В `.env` указываются `TELEGRAM__*`, `SDO__*` и `API__TOKEN` (admin). `SDO__BACKEND=auto` включает мобильный REST СДО, если он выдаёт токен. По умолчанию используется разбор HTML.
+### 2. Start the service
 
-Оценки преподавателя (только СДО) приходят в поле `grade` тех же элементов. Итог за курс — отдельный элемент с `kind=course_grade`. В REST-режиме оценки есть только у заданий.
-
-## Категории, чаты и ключи
+Keep these running in **two separate terminals**, from the repository root:
 
 ```bash
-inbox-hub categories create study --title "Учёба" --auto-source sdo   # новые курсы СДО попадают сюда сами
-inbox-hub categories create work --title "Работа"
-inbox-hub list-chats                                                   # группы и каналы аккаунта
-inbox-hub chats add -1001234567890 --category work                     # id из list-chats; начинает собираться
-inbox-hub categories add-channel study telegram:-1009876543210         # канал может быть в нескольких категориях
-inbox-hub channels list
-inbox-hub keys create study-digest --category study                    # печатает токен один раз
-inbox-hub keys grant study-digest news | ungrant | rotate | revoke
+# Terminal 1: collector
+uv run inbox-hub collect
 ```
-
-### Каталог в файле
-
-То же самое можно описать в `catalog.yaml` и применять целиком. Пример с пояснениями лежит в [catalog.example.yaml](catalog.example.yaml).
 
 ```bash
-inbox-hub catalog export -o catalog.yaml   # текущее состояние базы, каналы подписаны названиями
-inbox-hub catalog plan                     # что изменится; база не трогается
-inbox-hub catalog apply                    # показывает план, спрашивает подтверждение, применяет одной транзакцией
-inbox-hub catalog apply --prune            # плюс удаляет то, чего нет в файле
+# Terminal 2: API and scheduled jobs
+uv run inbox-hub serve
 ```
 
-- Без `--prune` apply только добавляет и обновляет, а удаления показывает отдельным списком. С `--prune` удаляются категории, вхождения каналов, доступы ключей к категориям и отслеживание чатов, которых нет в файле. Опечатка в slug превращается в удаление категории, поэтому сначала запускайте `plan --prune`.
-- Telegram-чат, указанный в `channels` любой категории, собирается. `telegram.track` — чаты без категорий, `telegram.paused` — чаты, которые не собираются, но остаются в категориях.
-- Каналы из `auto_sources` категории при `--prune` не удаляются. Чтобы убрать такой курс, внесите его в `exclude`.
-- Курс СДО, которого ещё нет в базе, пропускается с предупреждением: он появится после синхронизации.
-- Токенов в файле нет. Для нового ключа `apply` печатает токен один раз, `keys rotate` и `keys revoke` остаются командами. Ключи, которых нет в файле, не трогаются.
-- `catalog.yaml` содержит id личных чатов и уже добавлен в `.gitignore`.
+### 3. Choose a chat and create a client key
 
-В Docker файл передаётся через stdin, поэтому подтверждение нужно дать флагом: `docker compose exec -T inbox-hub inbox-hub catalog plan -f - < catalog.yaml`, затем `... catalog apply -f - --yes < catalog.yaml`.
-
-Команды работают с базой напрямую, поэтому их можно запускать рядом с работающими процессами. В Docker: `docker compose exec inbox-hub inbox-hub ...`. Новый чат коллектор подхватывает в течение минуты и сразу дочитывает историю с `TELEGRAM__BACKFILL_FROM`.
-
-`list-chats` и `GET /admin/telegram/dialogs` показывают снимок групп и каналов с последней сверки коллектора (в Telegram не ходят). Пока коллектор ни разу не запускался, список пуст.
-
-Канал без категорий собирается, но виден только admin-токену.
-
-### Обновление со Study Inbox
-
-Миграция `0002` кладёт все существующие каналы в категорию `study` и переносит отметки Received на ключ `study`. Этот ключ создаётся неактивным. После `init-db` выполните `inbox-hub keys rotate study` и пропишите полученный токен в MCP.
-
-## Запуск
-
-Два процесса на одной базе:
+In a third terminal, wait for the collector's first pass, then list the available chats:
 
 ```bash
-uv run inbox-hub collect   # единственный процесс, который ходит в Telegram
-uv run inbox-hub serve     # HTTP API + СДО по расписанию; Telegram не трогает (один воркер)
+uv run inbox-hub list-chats
+uv run inbox-hub categories create work --title "Work"
+# Replace the fictional ID with one from list-chats.
+uv run inbox-hub chats add -1001234567890 --category work
+uv run inbox-hub keys create work-briefing --category work
 ```
 
-`collect` держит lock-файл `data/telegram.lock`: второй процесс с той же сессией (ещё один `collect` или `login`) не запустится. Новые сообщения, правки и удаления приходят событиями (`catch_up=True` догоняет пропущенное за время простоя). При старте и раз в `TELEGRAM__RECONCILE_INTERVAL_HOURS` (по умолчанию 4) сверка через `iter_dialogs` дочитывает историю только тех отслеживаемых чатов, где Telegram видит сообщения новее сохранённых. Удалённые сообщения не стираются: они получают `deleted_at` и пропадают из `/items`. Исходный `message.to_dict()` хранится в `items.raw`. Скачиваются документы и фото (`TELEGRAM__DOWNLOAD_KINDS`), по одному.
+The key is printed once. Save it, then check access:
 
-Параметры клиента (`TELEGRAM__DEVICE_MODEL`, `TELEGRAM__SYSTEM_VERSION`, `TELEGRAM__APP_VERSION`) задайте один раз и не меняйте.
+```bash
+export INBOX_TOKEN="PASTE_THE_GENERATED_KEY"
+curl http://127.0.0.1:8000/me -H "Authorization: Bearer $INBOX_TOKEN"
+```
 
-Разовые команды: `sync sdo` и `import-export FILE --chat-id ID` (импорт JSON-экспорта Telegram Desktop).
+Newly tracked chats are picked up within a minute. To connect an AI client, follow the [MCP setup guide](mcp_adapter/README.md), using this scoped key.
 
-### Переход на отдельный коллектор
+## Documentation
 
-1. Остановить старый `serve`: раньше он сам подключался к Telegram, и два подключения с одной сессией недопустимы.
-2. `inbox-hub init-db` — миграция `0003`: колонки `raw` и `deleted_at`, таблица снимка диалогов, курсоры чатов поднимаются до последнего сохранённого `msg_id`. Данные не трогаются.
-3. Запустить `collect` и `serve`. Файл сессии используется как есть, повторный `login` не нужен.
+| Guide | Contents |
+| --- | --- |
+| [Configuration](docs/configuration.md) | Credentials, source settings, extraction limits |
+| [Categories and catalog](docs/catalog.md) | Channels, scoped keys, YAML plan/apply/export |
+| [HTTP API](docs/api.md) | Endpoints, time windows, access and Received semantics |
+| [MCP adapter](mcp_adapter/README.md) | Client configuration and independent profiles |
+| [Deployment](docs/deployment.md) | Docker, systemd, process lifecycle and data |
+| [Upgrading](docs/migrations.md) | Earlier installations and the former Study Inbox setup |
+| [Contributing](CONTRIBUTING.md) | Development setup and checks |
+| [Domain glossary](CONTEXT.md) | Project terminology |
 
-## Доступ
+## Current boundaries
 
-Все запросы идут с заголовком `Authorization: Bearer <token>`.
+- This is a backend service with CLI and API access. Summarization runs in your chosen AI client.
+- Scanned PDFs are marked `needs_ocr`; OCR is not included.
+- Run one collector per account session and one API worker. See [deployment](docs/deployment.md) for details.
+- Keep credentials, session files, your catalog, and collected data private. Use scoped API keys for clients; reserve the admin token for administration.
 
-- **API-ключ** (`ihk_...`, создаётся `inbox-hub keys create`) видит только элементы и файлы из своих категорий. Чужой элемент или файл — 404, чужая категория в `categories` — 403. Отметка Received у каждого ключа своя.
-- **Admin** (`API__TOKEN`) видит всё и управляет категориями через `/admin`. В MCP его не кладут.
+## License
 
-| Метод и путь | Назначение |
-|---|---|
-| `GET /items?from&to&source&categories&include_received&limit` | элементы с `published_at` в окне и изменённые в окне |
-| `GET /items/{id}` | элемент с полными текстами файлов |
-| `POST /items/receive` `{"ids": [...]}` | пометить элементы полученными этим ключом |
-| `GET /files/{sha256}` | исходный файл |
-| `GET /me` | имя ключа и его категории |
-| `GET /health` | состояние источников (подробности только admin) |
-| `POST /admin/sync/sdo` | ручная синхронизация СДО (Telegram из API не запускается) |
-| `/admin/categories`, `/admin/channels`, `/admin/telegram/chats`, `/admin/telegram/dialogs`, `/admin/keys` | управление (только admin) |
-
-## MCP
-
-Адаптер для ноутбука лежит в [mcp_adapter](mcp_adapter/README.md). Это один пакет, который запускается с разными профилями (ключами).
-
-## Деплой
-
-Скопировать [deploy/inbox-hub.service](deploy/inbox-hub.service) и [deploy/inbox-hub-collector.service](deploy/inbox-hub-collector.service) в `/etc/systemd/system/`, [deploy/Caddyfile](deploy/Caddyfile) — в конфигурацию Caddy, затем выполнить `systemctl enable --now inbox-hub inbox-hub-collector`.
-
-В Docker: `docker compose up -d --build`. Сервис `inbox-hub` сначала применяет миграции, затем запускает `serve`; `collector` стартует, только когда `inbox-hub` стал healthy. Том данных закреплён под старым именем `university-pz-parser_inbox-data`, поэтому данные сохраняются после переименования.
+[MIT](LICENSE) © 2026 Maksim.

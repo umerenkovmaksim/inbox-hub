@@ -1,83 +1,82 @@
 # Inbox Hub
 
-Собирает материалы из Telegram-чатов и из СДО вуза, раскладывает каналы по Categories и отдаёт ленту Claude через MCP. Каждый API key видит только свои Categories.
+Collects materials into categorized feeds for AI clients. Each API key can access only its assigned Categories.
 
 ## Language
 
 **Source**:
-Внешний поставщик материалов: `telegram` или `sdo`.
-_Avoid_: провайдер, платформа
+An external supplier of materials, such as a messaging service or a university learning management system (LMS).
+_Avoid_: provider, platform
 
 **Channel**:
-Конкретное место внутри Source, откуда пришёл материал: Telegram-чат или курс (предмет) в СДО.
-_Avoid_: чат (когда речь о СДО), группа
+A specific location within a Source from which materials originate, such as a chat or a course.
+_Avoid_: chat (when referring to an LMS course), group
 
 **Category**:
-Именованная группа Channels (учёба, работа, анонсы, хакатоны…), которую задаёт пользователь. Channel может входить в несколько Categories. У Category могут быть auto sources: новые Channels этого Source попадают в неё автоматически.
-_Avoid_: тег, папка, тип
+A user-defined group of Channels, such as study, work, or announcements. A Channel can belong to multiple Categories; a Category can also automatically include new Channels from selected Sources.
+_Avoid_: tag, folder, type
 
 **API key**:
-Учётные данные потребителя (профиль MCP, scheduled task). Привязан к набору Categories — это его **Scope**. Scope определяет сервер по ключу, параметры запроса его только сужают. Хранится только sha256 ключа.
-_Avoid_: токен (как общий термин), пользователь
+Credentials for a consumer, such as an MCP profile or a scheduled task, assigned to a set of Categories called its **Scope**. The server determines Scope from the key; request parameters can only narrow it.
+_Avoid_: token (as a general term), user
 
 **Admin token**:
-`API__TOKEN` из настроек. Без ограничения Scope, единственный, кому доступен `/admin`. В MCP не передаётся.
+Administrative credentials without a Scope restriction, with exclusive access to administration. Never supplied to MCP clients.
 
 **Tracked**:
-Признак Telegram-Channel, что его надо собирать. Задаётся через `inbox-hub chats add`.
+The state of a Telegram Channel selected for collection.
 
 **Item**:
-Одна единица материала из Source: сообщение в Telegram или элемент курса в СДО (описание, задание, ресурс). Идентифицируется парой Source + External key.
-_Avoid_: сообщение (как общий термин), запись, пост
+One unit of material from a Source, such as a message, course description, assignment, or resource. Its identity is the pair Source + External key.
+_Avoid_: message (as a general term), record, post
 
 **External key**:
-Естественный идентификатор Item внутри своего Source. По нему повторная обработка находит тот же Item, а не создаёт новый.
+The natural identifier of an Item within its Source. Reprocessing finds the same Item by this key instead of creating another one.
 
 **File**:
-Содержимое вложения, идентифицируемое своим sha256. Один File может принадлежать нескольким Items; изменённый файл — это новый File.
-_Avoid_: attachment (как идентичность), документ
+Attachment content identified by its sha256. A File can belong to multiple Items; changed content is a new File.
+_Avoid_: attachment (as an identity), document
 
 **Edited**:
-Состояние Item, у которого после первой обработки изменился текст или набор Files.
+The state of an Item whose text or Files have changed since initial processing.
 
 **Section**:
-Тематический раздел курса в СДО. Непустое описание Section — самостоятельный Item.
+A thematic part of an LMS course. A Section's nonempty description is a separate Item.
 
 **Published at**:
-Момент появления Item: дата сообщения в Telegram; для СДО — самая ранняя из дат файлов и «Открыто с», иначе момент первого обнаружения. По нему MCP выбирает окно.
+When an Item appeared: the message date for a message, or the earliest file date or opening date for an LMS material, falling back to first discovery. It determines the feed's publication window.
 
 **Due at**:
-Срок сдачи задания в СДО. Его изменение делает Item Edited.
+The submission deadline of an LMS assignment. A change makes the Item Edited.
 
 **Grade**:
-Оценка преподавателя за Item из СДО: балл, максимум, когда и кем выставлена, состояние оценивания, отзыв. Изменение Grade делает Item Edited.
-_Avoid_: результат, баллы (как общий термин)
+A teacher's assessment of an LMS Item: score, maximum score, grading time, grader, grading state, and feedback. A change makes the Item Edited.
+_Avoid_: result, points (as a general term)
 
 **Course grade**:
-Итоговая оценка за курс из журнала СДО. Отдельный Item, который появляется, когда итог известен.
+The final assessment of a course from the LMS gradebook. A separate Item that appears when the total becomes available.
 
 **Received**:
-Отметка, что конкретный API key забрал Item. Своя у каждого ключа; снимается для всех ключей, если Item стал Edited.
-_Avoid_: прочитано, ack, обработано
+A per-API-key mark that the consumer has retrieved an Item. Editing the Item clears this mark for all keys.
+_Avoid_: read, ack, processed
 
 **Text duplicate**:
-Item, чей нормализованный текст совпадает с более ранним Item (например, пересланное в несколько чатов объявление). Не сливается, а ссылается на оригинал.
+An Item whose normalized text matches an earlier Item, such as an announcement forwarded to multiple Channels. It references the original instead of being merged with it.
 
 ## Relationships
 
-- Source содержит много Channels; Channel содержит много Items
-- Channel входит в ноль или более Categories; Channel без Categories виден только Admin token
-- API key видит Item, если Channel этого Item входит хотя бы в одну Category его Scope
-- Item ссылается на ноль или более Files; File может быть общим для Items из разных Sources
-- Item может быть Text duplicate ровно одного более раннего Item
+- A Source contains many Channels; a Channel contains many Items.
+- A Channel belongs to zero or more Categories. Only the Admin token can access a Channel without Categories.
+- An API key can access an Item when its Channel belongs to at least one Category in the key's Scope.
+- An Item references zero or more Files; a File can be shared by Items from different Sources.
+- An Item can be a Text duplicate of exactly one earlier Item.
 
 ## Example dialogue
 
-> **Dev:** "Преподаватель заменил PDF в курсе — это новый Item?"
-> **Domain expert:** "Нет, Item тот же (тот же External key), но у него новый File по sha256, поэтому он становится Edited и теряет Received — MCP получит его снова."
+> **Developer:** "A teacher replaced a course PDF. Is that a new Item?"
+> **Domain expert:** "The Item keeps its External key, but the changed content is a new File. The Item becomes Edited and loses its Received marks, so clients can retrieve it again."
 
-## Flagged ambiguities
+## Terminology clarifications
 
-- «Ограничить категорией» — это не параметр запроса, а Scope API key. Параметр `categories` только сужает выборку внутри Scope.
-
-- «Дедуп» использовался и для повторной обработки одного Item, и для одинаковых файлов, и для одинакового текста — разведено на External key (Item), sha256 (File) и Text duplicate.
+- Restricting access to a Category is part of the API key's Scope. The `categories` request parameter only narrows results within that Scope.
+- Deduplication has three meanings: External key identifies an Item, sha256 identifies a File, and Text duplicate identifies repeated text across Items.

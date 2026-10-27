@@ -1,25 +1,27 @@
-# Категории, их каналы, отслеживаемые Telegram-чаты и доступ ключей.
-# Скопируйте в catalog.yaml и проверьте: `inbox-hub catalog plan`, затем `inbox-hub catalog apply`.
-# Без --prune apply только добавляет и обновляет; удаления — только с --prune.
+# Categories, their channels, tracked chats, and key scopes.
+# All IDs are fictional: replace them with your own. See docs/catalog.md.
+# Copy to catalog.yaml, run `uv run inbox-hub catalog plan`, then `uv run inbox-hub catalog apply`.
+# Without --prune, apply adds and updates; removals require --prune,
+# except for explicit exclude and telegram.paused entries.
 
 categories:
   study:
-    title: Учёба
-    description: курсы СДО и учебные чаты
-    auto_sources: [sdo]               # новые курсы СДО попадают сюда сами
+    title: Study
+    description: Course materials and study chats
+    auto_sources: [sdo]               # New LMS courses join automatically.
     channels:
-      - telegram:-1009876543210       # Группа ПИ-21 (чат из категории всегда собирается)
+      - telegram:-1009876543210       # Study chat; categorized chats are collected.
     exclude:
-      - sdo:1234                      # убрать курс, попавший сюда автоматически
+      - sdo:1234                      # Exclude an automatically included course.
   work:
-    title: Работа
+    title: Work
     channels:
-      - telegram:-1001234567890       # Рабочий чат
+      - telegram:-1001234567890       # Work chat.
 
 telegram:
-  track: []    # собирать без категорий (видит только admin)
-  paused: []   # не собирать, но оставить в категориях
+  track: []    # Collect without categories; visible only to the admin.
+  paused: []   # Stop collecting while preserving category membership.
 
 keys:
   study-digest:
-    categories: [study]   # токен печатается один раз при создании
+    categories: [study]   # The token is printed once when the key is created.

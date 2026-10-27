@@ -1,11 +1,28 @@
+# Local configuration
+.env
+.env.*
+!.env.example
+catalog.yaml
+compose.override.yaml
+compose.override.yml
+local
+
+# Sessions and collected data
 *.session
 *.session-journal
-.env
+data/
+
+# Python environment, caches, and builds
 .venv/
 __pycache__/
 .mypy_cache/
-.superpowers/
-data/
 .pytest_cache/
-catalog.yaml
-local
+.ruff_cache/
+dist/
+
+# Agent tooling
+.superpowers/
+docs/superpowers
+
+# OS files
+.DS_Store

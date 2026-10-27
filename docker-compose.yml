@@ -16,7 +16,7 @@ x-env: &env
   API__TOKEN: ${API__TOKEN:?}
 
 services:
-  # API + СДО. Applies migrations before serving, so "healthy" means the
+  # API and scheduled LMS jobs. Applies migrations before serving, so "healthy" means the
   # database schema is current.
   inbox-hub:
     build: .

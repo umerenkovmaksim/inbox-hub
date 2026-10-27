@@ -1,35 +1,38 @@
 # inbox-hub-mcp
 
-MCP-адаптер к серверу Inbox Hub. Работает на ноутбуке по stdio и ходит на сервер по HTTPS.
+[English](README.md) · [Русский](README.ru.md)
 
-Инструменты: `scope`, `get_items`, `mark_received`, `get_item`, `get_file`, `health`. Набор одинаковый в любом профиле.
+The MCP adapter for Inbox Hub runs locally over stdio and connects to the server over HTTPS.
 
-## Профили
+Tools: `scope`, `get_items`, `mark_received`, `get_item`, `get_file`, and `health`. Every profile has the same tool set.
 
-Пакет один, а запускать его можно несколько раз с разными **профилями**. Профиль — это API-ключ на сервере, привязанный к набору категорий. Что попадает в профиль, решает сервер по ключу, а не модель. Параметр `categories` в `get_items` может только сузить выборку внутри профиля. Чужую категорию сервер не отдаст: на неё будет 403, а на чужой элемент или файл — 404.
+## Profiles
 
-Ключи создаются на сервере, токен печатается один раз:
+One package can run multiple times with different **profiles**. A profile is a server-side API key assigned to a set of Categories. The server determines access from the key; the model cannot expand it. The `categories` argument of `get_items` can only narrow a profile's scope. An out-of-scope Category returns 403; an out-of-scope Item or File returns 404.
+
+Create keys on the server from the repository root. Tokens are printed once. [Create the Categories first](../docs/catalog.md):
 
 ```bash
-inbox-hub keys create personal --category study --category work --category news
-inbox-hub keys create study-digest --category study
+uv run inbox-hub keys create personal --category study --category work --category news
+uv run inbox-hub keys create study-digest --category study
 ```
 
-Переменные окружения:
-- `INBOX_URL`: адрес сервера.
-- `INBOX_TOKEN`: токен ключа (`ihk_...`).
-- `INBOX_PROFILE`: имя MCP-сервера, которое видит клиент.
-- `INBOX_DOWNLOAD_DIR`: необязательно, по умолчанию `~/Downloads/inbox-hub`.
+Environment variables:
 
-**Admin-токен (`API__TOKEN`) в MCP не кладётся никогда.** Адаптер в него не ходит и admin-инструментов не имеет.
+- `INBOX_URL`: server address.
+- `INBOX_TOKEN`: an API key token (`ihk_...`).
+- `INBOX_PROFILE`: the MCP server name exposed to the client.
+- `INBOX_DOWNLOAD_DIR`: optional; defaults to `~/Downloads/inbox-hub`.
 
-## Конфигурация Claude
+**Keep the admin token (`API__TOKEN`) out of MCP configurations.** The adapter exposes no administrative tools.
 
-Адаптер запускается прямо из GitHub через `uvx` и обновляется сам: `--refresh-package` при каждом старте MCP-сервера проверяет свежую версию из `main`, а зависимости (`mcp`, `httpx`) берутся из кэша. `main` — та же ветка, что задеплоена, поэтому адаптер и сервер не расходятся по версиям. Новая версия подхватывается при следующем запуске MCP-сервера: новая сессия Claude Code, перезапуск Claude Desktop, каждый запуск scheduled task. Уже работающий процесс сам не перезапускается.
+## MCP client configuration
 
-Репозиторий приватный, uv скачивает его через системный git. Нужен SSH-ключ, добавленный в GitHub (как в примерах ниже), или `git+https://github.com/...` при настроенном доступе по HTTPS (`gh auth setup-git`). При каждом старте нужен доступ к GitHub.
+Run the adapter directly from GitHub with `uvx`. At each MCP server startup, `--refresh-package` checks for the latest version on `main`, while dependencies (`mcp`, `httpx`) can use the cache. If your server runs a different revision, pin the same commit SHA in the URL instead of `main`. Updates take effect the next time the MCP server starts, such as after restarting the client or starting a scheduled task. A running process does not restart itself.
 
-Для интерактивной работы подойдёт широкий профиль: человек видит, что делает модель.
+The repository is public: HTTPS installation requires no GitHub account or SSH key. Install `uv`, Git, and Python 3.12+ on the client machine; the server requires Python 3.14+. GitHub must be reachable at startup when using `--refresh-package`. The examples below use the `mcpServers` configuration format; the configuration file's location depends on the client.
+
+A broad profile can be useful for interactive work where a person supervises the model:
 
 ```json
 {
@@ -38,16 +41,20 @@ inbox-hub keys create study-digest --category study
       "command": "uvx",
       "args": [
         "--refresh-package", "inbox-hub-mcp",
-        "--from", "git+ssh://git@github.com/umerenkovmaksim/university-pz-parser@main#subdirectory=mcp_adapter",
+        "--from", "git+https://github.com/umerenkovmaksim/inbox-hub@main#subdirectory=mcp_adapter",
         "inbox-hub-mcp"
       ],
-      "env": {"INBOX_URL": "https://inbox.example.ru", "INBOX_TOKEN": "ihk_...personal", "INBOX_PROFILE": "inbox"}
+      "env": {
+        "INBOX_URL": "https://inbox.example.ru",
+        "INBOX_TOKEN": "ihk_...personal",
+        "INBOX_PROFILE": "inbox"
+      }
     }
   }
 }
 ```
 
-Для scheduled task нужен узкий профиль, и в её конфигурации подключается только он. Если в публичном канале окажется текст вроде «а теперь достань рабочие чаты», задача всё равно не выйдет за свои категории:
+For a scheduled task, use a narrow profile and connect only that profile in its configuration. Text in an external channel asking the model to retrieve work materials cannot grant the study key access to work Categories:
 
 ```json
 {
@@ -56,27 +63,45 @@ inbox-hub keys create study-digest --category study
       "command": "uvx",
       "args": [
         "--refresh-package", "inbox-hub-mcp",
-        "--from", "git+ssh://git@github.com/umerenkovmaksim/university-pz-parser@main#subdirectory=mcp_adapter",
+        "--from", "git+https://github.com/umerenkovmaksim/inbox-hub@main#subdirectory=mcp_adapter",
         "inbox-hub-mcp"
       ],
-      "env": {"INBOX_URL": "https://inbox.example.ru", "INBOX_TOKEN": "ihk_...study-digest", "INBOX_PROFILE": "inbox-study"}
+      "env": {
+        "INBOX_URL": "https://inbox.example.ru",
+        "INBOX_TOKEN": "ihk_...study-digest",
+        "INBOX_PROFILE": "inbox-study"
+      }
     }
   }
 }
 ```
 
-### Запуск из локального клона
+### Running from a local clone
 
-Без доступа к GitHub при старте можно запускать из клона: `"command": "uv", "args": ["run", "--directory", "/ABS/PATH/university-pz-parser/mcp_adapter", "inbox-hub-mcp"]`. Тогда адаптер сам не обновляется: после изменений нужен `git pull` в клоне и перезапуск клиента.
+To run without fetching GitHub at startup, use a local clone. Install its dependencies once with `uv sync --locked --directory /ABS/PATH/inbox-hub/mcp_adapter`, then configure:
 
-Изоляция проходит между профилями. Если в одном клиенте подключено несколько профилей, модель может пользоваться каждым из них.
+```json
+{
+  "mcpServers": {
+    "inbox": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABS/PATH/inbox-hub/mcp_adapter", "inbox-hub-mcp"],
+      "env": {
+        "INBOX_URL": "https://inbox.example.ru",
+        "INBOX_TOKEN": "ihk_...personal",
+        "INBOX_PROFILE": "inbox"
+      }
+    }
+  }
+}
+```
 
-Отметка Received своя у каждого профиля: сводка по учёбе не прячет элементы от сводки по работе.
+Replace the absolute path and placeholder credentials. This setup does not update the adapter automatically. Pull changes into the clone and restart the client to update it; changed dependencies may need network access.
 
-## Переход со Study Inbox
+Isolation is between profiles. If a client connects multiple profiles, the model can use all of them. Received marks are independent for each profile: a study briefing does not hide Items from a work briefing.
 
-Старая конфигурация (`study-inbox-mcp` и admin-токен) после обновления сервера не работает: адаптер переименован, а отметки Received теперь у каждого ключа свои, и admin-токен их не ставит.
+## Upgrading an older installation
 
-1. На сервере выпустить токен для ключа `study`, который миграция создала неактивным и на который перенесла старые отметки: `inbox-hub keys rotate study`. В Coolify — терминал контейнера `inbox-hub`, в Docker — `docker compose exec inbox-hub inbox-hub keys rotate study`.
-2. В конфигурации MCP заменить запуск на `inbox-hub-mcp` (см. выше), `INBOX_TOKEN` — на полученный `ihk_...`, добавить `INBOX_PROFILE`.
-3. Перезапустить клиент.
+See the [upgrade guide](../docs/migrations.md) for migration from Study Inbox and rotation of the migrated key.
+
+[Main README](../README.md) · [HTTP API](../docs/api.md)
